@@ -3,6 +3,7 @@ import { DriverData, QueueStatus, UserProfile, GateConfig, SlotInfo, DivisionCon
 
 // KONFIGURASI GRUP WA & SISTEM
 const ID_GROUP_OPS = '120363423657558569@g.us'; // Ganti dengan ID Grup Asli Anda
+const DEV_CONFIG_KEY = 'yms_dev_config';
 
 // --- HELPER UTILS ---
 const formatTime = (ts: number | string) => {
@@ -32,7 +33,7 @@ const sendWANotification = async (target: string, message: string) => {
 const mapSupabaseToDriver = (data: any): DriverData => ({
     id: data.id,
     name: data.name,
-    licensePlate: data.license_plate, 
+    licensePlate: data.license_plate, // Pastikan field ini sesuai dengan kolom di Supabase
     company: data.company,
     status: data.status as QueueStatus,
     checkInTime: data.check_in_time,
@@ -65,7 +66,7 @@ export const getDriverById = async (id: string): Promise<DriverData | null> => {
 
 // 1. CREATE BOOKING
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
-    // FIX: Ambil plat nomor dari field manapun yang tersedia (camelCase atau snake_case)
+    // FIX: Ambil plat nomor dari field manapun yang tersedia
     const plateNumber = data.licensePlate || (data as any).license_plate || '-';
     const nameStr = data.name || 'Driver';
 
@@ -113,7 +114,7 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
                     `Booking Anda telah terdaftar:\n` +
                     `--------------------------------------------\n` +
                     `Kode Booking  : ${code}\n` +
-                    `Plat Nomor    : ${plateNumber}\n` + // Menggunakan variabel plateNumber
+                    `Plat Nomor    : ${plateNumber}\n` +
                     `Jadwal        : ${data.slotDate || '-'} [${data.slotTime || '-'}]\n` +
                     `--------------------------------------------\n\n` +
                     `Harap tiba 15 menit sebelum jadwal.\n` +
@@ -246,7 +247,8 @@ export const rejectDriver = async (id: string, reason: string, verifier: string)
     return true;
 };
 
-// --- FUNGSI PENDUKUNG LAINNYA ---
+// --- FUNGSI PENDUKUNG (WAJIB ADA UNTUK MENCEGAH ERROR DI FILE LAIN) ---
+
 export const getAvailableSlots = async (date: string): Promise<SlotInfo[]> => {
     const dayOfWeek = new Date(date + 'T00:00:00').getDay(); 
     if (dayOfWeek === 0) return []; 
@@ -298,7 +300,7 @@ export const scanDriverQR = async (code: string): Promise<DriverData | null> => 
     return mapSupabaseToDriver(data);
 };
 
-// GATE & USERS
+// GATE & USERS & UTILS (JANGAN DIHAPUS - DIGUNAKAN SYSTEM OVERVIEW)
 export const getGateConfigs = async (): Promise<GateConfig[]> => {
     const { data } = await supabase.from('gate_configs').select('*').order('gate_id', { ascending: true });
     return (data || []).map((g: any) => ({ id: g.id, name: g.name, capacity: g.capacity, status: g.status, type: g.type }));
@@ -307,12 +309,48 @@ export const saveGateConfig = async (gate: GateConfig): Promise<boolean> => {
     const { error } = await supabase.from('gate_configs').upsert({ gate_id: gate.id, name: gate.name, capacity: gate.capacity, status: gate.status, type: gate.type }, { onConflict: 'gate_id' });
     return !error;
 };
+export const deleteSystemSetting = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from('gate_configs').delete().eq('id', id);
+    return !error;
+};
+
+// DEV CONFIG & STUBS (DIPERLUKAN AGAR FILE LAIN TIDAK ERROR)
+export interface DevConfig { enableGpsBypass: boolean; enableMockOCR: boolean; }
+export const getDevConfig = (): DevConfig => {
+    if (typeof window === 'undefined') return { enableGpsBypass: false, enableMockOCR: false };
+    try {
+        const stored = localStorage.getItem(DEV_CONFIG_KEY);
+        return stored ? JSON.parse(stored) : { enableGpsBypass: false, enableMockOCR: false };
+    } catch (e) { return { enableGpsBypass: false, enableMockOCR: false }; }
+};
+export const saveDevConfig = (config: DevConfig): void => {
+    if (typeof window !== 'undefined') localStorage.setItem(DEV_CONFIG_KEY, JSON.stringify(config));
+};
+
+// DUMMY / STUB FUNCTIONS
+const HARDCODED_USERS: UserProfile[] = [
+    { id: 'SECURITY', name: 'Pak Satpam', role: 'SECURITY', pin_code: '1234', status: 'ACTIVE' },
+    { id: 'ADMIN', name: 'Admin Ops', role: 'ADMIN', pin_code: '1234', status: 'ACTIVE' }
+];
 export const loginSystem = async (id: string, pass: string): Promise<UserProfile> => {
-    if (id.toUpperCase() === 'ADMIN' && pass === '1234') return { id: 'ADMIN', name: 'Admin Ops', role: 'ADMIN', pin_code: '1234', status: 'ACTIVE' };
-    throw new Error("Invalid Credentials");
+    await new Promise(r => setTimeout(r, 500));
+    const user = HARDCODED_USERS.find(u => u.id === id.toUpperCase() && u.pin_code === pass);
+    if (!user) throw new Error("Invalid Credentials");
+    return user;
 };
 export const verifyDivisionCredential = async (id: string, pass: string): Promise<DivisionConfig | null> => {
     if (id.toUpperCase() === 'SECURITY' && pass === '1234') return { id: 'SECURITY', name: 'Security Guard', role: 'SECURITY', password: '1234', theme: 'blue' };
     return null;
 };
 export const getActivityLogs = async (): Promise<ActivityLog[]> => { return []; };
+export const wipeDatabase = async (): Promise<void> => { console.log("Wipe DB stub"); };
+export const seedDummyData = async (): Promise<void> => { console.log("Seed Data stub"); };
+export const exportDatabase = (): string => { return "{}"; };
+export const importDatabase = (json: string): boolean => { console.log("Import stub"); return true; };
+export const getProfiles = async (): Promise<UserProfile[]> => { return HARDCODED_USERS; };
+export const addProfile = async (profile: UserProfile): Promise<boolean> => { console.log("Add profile stub"); return true; };
+export const updateProfile = async (profile: UserProfile): Promise<boolean> => { console.log("Update profile stub"); return true; };
+export const deleteProfile = async (id: string): Promise<boolean> => { console.log("Delete profile stub"); return true; };
+export const getDivisions = async (): Promise<DivisionConfig[]> => { return []; };
+export const saveDivision = async (div: DivisionConfig): Promise<boolean> => { console.log("Save div stub"); return true; };
+export const deleteDivision = async (id: string): Promise<boolean> => { console.log("Delete div stub"); return true; };
