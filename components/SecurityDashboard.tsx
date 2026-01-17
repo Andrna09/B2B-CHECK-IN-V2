@@ -20,16 +20,14 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
     try {
         setIsLoading(true);
         const data = await getDrivers();
-        // Pastikan data yang masuk selalu Array
         if (Array.isArray(data)) {
             setDrivers(data);
         } else {
-            console.warn("Data driver bukan array:", data);
             setDrivers([]); 
         }
     } catch (e) {
         console.error("Gagal load driver:", e);
-        setDrivers([]); // Fallback ke array kosong agar tidak blank
+        setDrivers([]);
     } finally {
         setIsLoading(false);
     }
@@ -37,7 +35,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 5000); // Auto refresh tiap 5 detik
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, [view]);
 
@@ -59,17 +57,19 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
       }
       setScannedDriver(null);
       setView('DASHBOARD');
-      fetchData(); // Refresh list segera
+      fetchData(); 
   };
 
-  // --- SAFE FILTERING (ANTI CRASH) ---
+  // --- SAFE FILTERING ---
   const filteredList = (drivers || []).filter(d => {
       if (!d) return false;
       const match = (d.licensePlate || '').toUpperCase().includes(search.toUpperCase()) || 
                     (d.name || '').toLowerCase().includes(search.toLowerCase());
       
       if (activeTab === 'GATE_IN') {
-          return match && [QueueStatus.BOOKED, QueueStatus.CHECKED_IN, QueueStatus.AT_GATE].includes(d.status);
+          // ✅ FIX: Hapus CHECKED_IN agar driver yg sudah diapprove HILANG dari list Security
+          // Security hanya melihat yang statusnya BOOKED (Belum datang) atau AT_GATE (Sudah di gerbang)
+          return match && [QueueStatus.BOOKED, QueueStatus.AT_GATE].includes(d.status);
       } else {
           return match && d.status === QueueStatus.COMPLETED;
       }
@@ -101,7 +101,6 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
   // --- RENDER DASHBOARD ---
   return (
       <div className="p-4 md:p-6 bg-slate-100 min-h-screen">
-          {/* Header */}
           <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
             <div>
                 <h1 className="text-xl font-black text-slate-800">Security Ops</h1>
@@ -113,19 +112,16 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
             </div>
           </div>
           
-          {/* Main Action */}
           <button onClick={() => setIsScanModalOpen(true)} className="w-full bg-blue-600 text-white p-8 rounded-3xl mb-6 flex flex-col items-center justify-center gap-3 shadow-xl shadow-blue-200 hover:scale-[1.01] transition-transform active:scale-95">
               <Camera className="w-12 h-12"/> 
               <span className="font-black text-xl tracking-wide">SCAN QR CODE</span>
           </button>
 
-          {/* Tabs */}
           <div className="flex p-1.5 bg-white rounded-2xl shadow-sm border border-slate-200 mb-4">
                 <button onClick={() => setActiveTab('GATE_IN')} className={`flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'GATE_IN' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}><LogIn className="w-4 h-4" /> Kendaraan Masuk</button>
                 <button onClick={() => setActiveTab('GATE_OUT')} className={`flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'GATE_OUT' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}><LogOut className="w-4 h-4" /> Kendaraan Keluar</button>
           </div>
 
-          {/* List */}
           <div className="space-y-3 pb-20">
               {filteredList.length === 0 ? (
                   <div className="text-center py-10 text-slate-400 font-bold">Tidak ada antrian saat ini.</div>
@@ -135,6 +131,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                           <div>
                               <div className="font-black text-lg text-slate-800">{d.licensePlate}</div>
                               <div className="text-xs font-bold text-slate-400">{d.name} • {d.company}</div>
+                              <div className="text-[10px] font-bold text-blue-500 mt-1 bg-blue-50 px-2 py-0.5 rounded w-fit">{d.status}</div>
                           </div>
                           {activeTab === 'GATE_IN' ? (
                             <button onClick={() => handleManualSelect(d)} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors">PROSES</button>
@@ -159,7 +156,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                           <div className="max-h-60 overflow-y-auto space-y-2">
                               {(drivers || [])
                                 .filter(d => d.licensePlate.includes(manualIdInput.toUpperCase()))
-                                .slice(0, 5) // Batasi 5 hasil saja biar ringan
+                                .slice(0, 5) 
                                 .map(d => (
                                   <div key={d.id} onClick={() => handleManualSelect(d)} className="p-3 bg-slate-50 rounded-xl font-bold text-slate-700 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors border border-transparent hover:border-blue-200">
                                       {d.licensePlate} <span className="text-xs font-normal text-slate-400 ml-2">({d.name})</span>
