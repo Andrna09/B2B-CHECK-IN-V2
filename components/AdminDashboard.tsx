@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { getDrivers, callDriver, updateDriverStatus, rejectDriver, getGateConfigs } from '../services/dataService';
 import { DriverData, QueueStatus, GateConfig } from '../types';
 import { 
-  Truck, MapPin, Megaphone, X, List, Phone, ExternalLink, Loader2, Ban, Send,
-  FileText, Clock, CheckSquare, XCircle, Eye, AlertTriangle, Search, RefreshCw, LayoutGrid
+  Truck, MapPin, Megaphone, X, Phone, ExternalLink, Loader2, Ban, Send,
+  FileText, Clock, CheckSquare, XCircle, Eye, AlertTriangle, Search, RefreshCw, LayoutGrid, List
 } from 'lucide-react';
 import { getStatusLabel, getStatusColor } from '../utils/formatters';
 
@@ -55,7 +55,7 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
       await callDriver(selectedDriver.id, "Admin Ops", selectedGateForCall);
       
       // FIX WA: Ambil data dengan aman agar tidak NULL
-      const plate = selectedDriver.licensePlate || '-';
+      const plate = selectedDriver.licensePlate || (selectedDriver as any).license_plate || '-';
       const name = selectedDriver.name || 'Driver';
       const gate = selectedGateForCall.replace(/_/g, ' '); 
       const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
@@ -70,8 +70,10 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
              `Sociolla Warehouse Management`;
 
       // Buka WA
-      const phone = selectedDriver.phone.replace(/\D/g,'').replace(/^0/,'62');
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+      if(selectedDriver.phone) {
+          const phone = selectedDriver.phone.replace(/\D/g,'').replace(/^0/,'62');
+          window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+      }
 
       setIsModalOpen(false);
       setProcessingId(null);
@@ -97,6 +99,13 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
       }
   };
 
+  const sendWarningWA = (driver: DriverData) => {
+      if(!driver.phone) return alert("No HP tidak tersedia");
+      const msg = `PERINGATAN PELANGGARAN\n\nHalo ${driver.name},\nKami mendeteksi ketidaksesuaian prosedur.\nMohon segera temui petugas security.\n\nSociolla Warehouse Security`;
+      const phone = driver.phone.replace(/\D/g,'').replace(/^0/,'62');
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
   // --- HELPERS ---
   const getGateOccupant = (gateName: string) => {
       return drivers.find(d => d.gate === gateName && [QueueStatus.CALLED, QueueStatus.LOADING].includes(d.status));
@@ -111,7 +120,8 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
 
   // --- FILTER LOGIC ---
   const filteredData = drivers.filter(d => {
-      const matchSearch = d.licensePlate.toLowerCase().includes(searchQuery.toLowerCase()) || d.company.toLowerCase().includes(searchQuery.toLowerCase());
+      const plate = d.licensePlate || (d as any).license_plate || '';
+      const matchSearch = plate.toLowerCase().includes(searchQuery.toLowerCase()) || d.company.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchSearch) return false;
 
       if (activeFilter === 'VERIFIKASI') return d.status === QueueStatus.CHECKED_IN;
@@ -192,14 +202,24 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredData.length === 0 ? (
-                                    <tr><td colSpan={4} className="p-12 text-center text-slate-400 font-bold">Data tidak ditemukan</td></tr>
-                                ) : filteredData.map(d => (
+                                    <tr>
+                                        <td colSpan={4} className="p-12 text-center text-slate-400 font-bold">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <List className="w-10 h-10 opacity-20"/>
+                                                <span>Data tidak ditemukan</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : filteredData.map(d => {
+                                    // Ambil plat nomor dengan fallback aman
+                                    const displayPlate = d.licensePlate || (d as any).license_plate || '-';
+                                    return (
                                     <tr key={d.id} className="hover:bg-blue-50/30 transition-colors">
                                         <td className="px-8 py-6 align-top">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center font-black text-lg text-slate-500 border border-slate-200">{d.licensePlate.slice(-1)}</div>
+                                                <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center font-black text-lg text-slate-500 border border-slate-200">{displayPlate.slice(-1)}</div>
                                                 <div>
-                                                    <div className="font-black text-xl text-slate-800 font-mono">{d.licensePlate}</div>
+                                                    <div className="font-black text-xl text-slate-800 font-mono">{displayPlate}</div>
                                                     <div className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded w-fit mt-1">Antrian #{d.queueNumber}</div>
                                                 </div>
                                             </div>
@@ -209,7 +229,7 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                                             <div className="text-xs text-slate-500 mb-2">{d.name}</div>
                                             <div className="flex gap-2">
                                                 <button onClick={() => window.open(`https://wa.me/${d.phone.replace(/\D/g,'').replace(/^0/,'62')}`, '_blank')} className="px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-[10px] font-bold border border-green-200 flex items-center gap-1 hover:bg-green-100"><Phone className="w-3 h-3"/> WA</button>
-                                                {d.documentFile && <button onClick={() => setPreviewDoc({url: d.documentFile!, title: d.licensePlate})} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200 flex items-center gap-1 hover:bg-blue-100"><Eye className="w-3 h-3"/> Dokumen</button>}
+                                                {d.documentFile && <button onClick={() => setPreviewDoc({url: d.documentFile!, title: displayPlate})} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200 flex items-center gap-1 hover:bg-blue-100"><Eye className="w-3 h-3"/> Dokumen</button>}
                                             </div>
                                         </td>
                                         <td className="px-8 py-6 align-top">
@@ -217,12 +237,23 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                                                 <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>
                                                 {getStatusLabel(d.status)}
                                             </span>
+                                            {d.securityNotes && (
+                                                <div className="mt-2 flex items-start gap-1 text-[10px] text-red-500 font-medium bg-red-50 p-1.5 rounded max-w-[200px]" title={d.securityNotes}>
+                                                    <AlertTriangle className="w-3 h-3 shrink-0"/>
+                                                    <span className="line-clamp-2">{d.securityNotes}</span>
+                                                </div>
+                                            )}
                                             <div className="mt-2 text-xs font-bold text-slate-600 flex items-center gap-1">
                                                 <MapPin className="w-3 h-3 text-slate-400"/> {d.gate === 'NONE' ? 'Menunggu Gate' : d.gate.replace(/_/g, ' ')}
                                             </div>
                                         </td>
                                         <td className="px-8 py-6 align-top text-right">
                                             <div className="flex justify-end gap-2">
+                                                {/* WARNING BUTTON */}
+                                                <button onClick={() => sendWarningWA(d)} className="p-2.5 text-amber-500 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 transition-colors" title="Kirim Peringatan">
+                                                    <AlertTriangle className="w-4 h-4"/>
+                                                </button>
+
                                                 {activeFilter === 'VERIFIKASI' && (
                                                     <>
                                                         <button onClick={() => handleReject(d)} className="p-2.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-200"><XCircle className="w-4 h-4"/></button>
@@ -238,7 +269,8 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -249,6 +281,8 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                     {availableGates.filter(g => g.type === 'DOCK').map(gate => {
                         const occupant = getGateOccupant(gate.name);
                         const isBusy = !!occupant;
+                        const occupantPlate = isBusy ? (occupant.licensePlate || (occupant as any).license_plate) : '';
+
                         return (
                             <div key={gate.id} className={`rounded-3xl p-6 border-2 min-h-[200px] flex flex-col justify-between relative overflow-hidden transition-all ${isBusy ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200'}`}>
                                 <div className="flex justify-between items-start z-10">
@@ -257,7 +291,7 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                                 </div>
                                 {isBusy ? (
                                     <div className="z-10 mt-4">
-                                        <div className="text-3xl font-black text-slate-900 font-mono tracking-tight">{occupant.licensePlate}</div>
+                                        <div className="text-3xl font-black text-slate-900 font-mono tracking-tight">{occupantPlate}</div>
                                         <div className="text-xs text-slate-500 font-bold mt-1 truncate">{occupant.company}</div>
                                     </div>
                                 ) : (
@@ -284,9 +318,14 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                     
                     <div className="p-6 overflow-y-auto">
                         <div className="mb-6 p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-4">
-                            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-xl font-black text-blue-600">{selectedDriver.licensePlate.slice(-1)}</div>
+                            {/* FIX DISPLAY PLATE MODAL */}
+                            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-xl font-black text-blue-600">
+                                {(selectedDriver.licensePlate || (selectedDriver as any).license_plate || '-').slice(-1)}
+                            </div>
                             <div>
-                                <h4 className="font-black text-2xl text-slate-800 font-mono">{selectedDriver.licensePlate}</h4>
+                                <h4 className="font-black text-2xl text-slate-800 font-mono">
+                                    {selectedDriver.licensePlate || (selectedDriver as any).license_plate || '-'}
+                                </h4>
                                 <p className="text-xs text-slate-500 font-bold uppercase">{selectedDriver.name} • {selectedDriver.company}</p>
                             </div>
                         </div>
@@ -325,6 +364,11 @@ const AdminDashboard: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 <div className="bg-white rounded-2xl overflow-hidden max-w-3xl w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
                     <div className="p-4 border-b flex justify-between items-center"><h3 className="font-bold">{previewDoc.title}</h3><button onClick={() => setPreviewDoc(null)}><X/></button></div>
                     <div className="flex-1 bg-slate-100 p-4 flex justify-center overflow-auto"><img src={previewDoc.url} className="max-w-full rounded shadow"/></div>
+                    <div className="p-4 bg-white border-t text-center">
+                        <a href={previewDoc.url} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 text-blue-600 font-bold text-xs hover:underline">
+                            <ExternalLink className="w-4 h-4"/> Buka Resolusi Penuh (Tab Baru)
+                        </a>
+                    </div>
                 </div>
             </div>
         )}
