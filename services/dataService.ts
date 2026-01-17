@@ -1,12 +1,20 @@
 import { supabase } from './supabaseClient';
 import { DriverData, QueueStatus, UserProfile, GateConfig, SlotInfo, DivisionConfig, ActivityLog } from '../types';
 
-// ID GROUP WA OPERASIONAL (Ganti sesuai kebutuhan)
+// ID GROUP WA OPERASIONAL (Ganti dengan ID Grup Asli)
 const ID_GROUP_OPS = '120363423657558569@g.us'; 
 const DEV_CONFIG_KEY = 'yms_dev_config';
 
 // --- HELPER UTILS ---
-const formatDate = (ts: number) => new Date(ts).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short' });
+// Formatter waktu: "14:30 WIB"
+const formatTime = (ts: number | string) => {
+    return new Date(ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+};
+
+// Formatter tanggal: "18 Januari 2026"
+const formatDateLocal = (ts: number | string) => {
+    return new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+};
 
 const sendWANotification = async (target: string, message: string) => {
     if (!target) return;
@@ -37,7 +45,6 @@ const mapSupabaseToDriver = (data: any): DriverData => ({
     slotDate: data.slot_date,
     slotTime: data.slot_time,
     queueNumber: data.queue_number,
-    // ✅ FIX: Mapping ke 'notes' atau 'security_notes' karena 'remarks' tidak ada di DB
     remarks: data.notes || data.security_notes, 
     gate: data.gate,
     photoBeforeURLs: data.photo_before_urls,
@@ -55,6 +62,7 @@ export const getDriverById = async (id: string): Promise<DriverData | null> => {
     return mapSupabaseToDriver(data);
 };
 
+// --- 1. TEMPLATE: KONFIRMASI BOOKING (CONFIRM_BOOKING) ---
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
     const nowObj = new Date();
     const period = `${nowObj.getFullYear()}${String(nowObj.getMonth() + 1).padStart(2, '0')}`;
@@ -95,12 +103,27 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
     if (error) { console.error("DB Error", error); return null; }
 
     if (data.phone) {
-        sendWANotification(data.phone, `KONFIRMASI BOOKING BERHASIL ✅\n\nHalo ${data.name},\nBooking Anda terdaftar:\n📋 Kode: *${code}*\n🚛 Plat: ${data.licensePlate}\n📅 Jadwal: ${data.slotDate || '-'} (${data.slotTime || '-'})`);
+        // [TEMPLATE 1: CONFIRM_BOOKING]
+        const msg = `KONFIRMASI BOOKING BERHASIL\n\n` +
+                    `Halo ${data.name},\n\n` +
+                    `Booking Anda telah terdaftar:\n` +
+                    `--------------------------------------------\n` +
+                    `Kode Booking  : ${code}\n` +
+                    `Plat Nomor    : ${data.license_plate}\n` +
+                    `Jadwal        : ${data.slotDate || '-'} [${data.slotTime || '-'}]\n` +
+                    `Jenis Muatan  : ${data.purpose || 'Logistik'}\n` +
+                    `--------------------------------------------\n\n` +
+                    `PENTING:\n` +
+                    `- Tiba 15 menit sebelum jadwal\n` +
+                    `- Siapkan dokumen: SJ, Invoice, KTP\n\n` +
+                    `Sociolla Warehouse Management`;
+        sendWANotification(data.phone, msg);
     }
 
     return mapSupabaseToDriver(insertedData);
 };
 
+// --- 2. TEMPLATE: TIKET ANTRIAN & NOTIF OPS (TICKET_QUEUE & NOTIF_OPS) ---
 export const verifyDriver = async (id: string, verifier: string, notes: string, photos: string[]): Promise<boolean> => {
     const { data: driver } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!driver) return false;
@@ -115,7 +138,7 @@ export const verifyDriver = async (id: string, verifier: string, notes: string, 
     const { error } = await supabase.from('drivers').update({
         status: QueueStatus.CHECKED_IN, 
         queue_number: queueNo, 
-        security_notes: notes, // ✅ FIX: Ubah remarks -> security_notes
+        security_notes: notes,
         verified_by: verifier, 
         verified_time: now, 
         photo_before_urls: photos 
@@ -123,12 +146,38 @@ export const verifyDriver = async (id: string, verifier: string, notes: string, 
 
     if (error) return false;
 
-    if (driver.phone) sendWANotification(driver.phone, `TIKET ANTRIAN ANDA 🎫\n\n🔢 Antrian: *#${queueNo}*\n📍 Posisi: Area Parkir`);
-    sendWANotification(ID_GROUP_OPS, `NOTIFIKASI OPERASIONAL 📦\nSTATUS: *ENTRY APPROVED* ✅\n🚛 Vendor: ${driver.company}\n🔢 Antrian: *#${queueNo}*`);
+    // A. Pesan ke DRIVER (TICKET_QUEUE)
+    if (driver.phone) {
+        const msgDriver = `TIKET ANTRIAN ANDA\n\n` +
+                          `Nomor Antrian : ${queueNo}\n` +
+                          `Status        : ENTRY APPROVED\n` +
+                          `Waktu Masuk   : ${formatTime(now)}\n` +
+                          `--------------------------------------------\n` +
+                          `INSTRUKSI:\n` +
+                          `1. Parkir di area tunggu yang tersedia\n` +
+                          `2. Tunggu panggilan via WhatsApp/Monitor\n` +
+                          `3. Dilarang meninggalkan area gudang\n\n` +
+                          `Sociolla Warehouse Management`;
+        sendWANotification(driver.phone, msgDriver);
+    }
+
+    // B. Pesan ke GRUP OPS (NOTIF_OPS)
+    const msgOps = `NOTIFIKASI KEDATANGAN (INBOUND)\n` +
+                   `--------------------------------------------\n` +
+                   `Antrian      : ${queueNo}\n` +
+                   `Vendor       : ${driver.company}\n` +
+                   `Plat Nomor   : ${driver.license_plate}\n` +
+                   `Driver       : ${driver.name}\n` +
+                   `Jam Masuk    : ${formatTime(now)}\n` +
+                   `Security     : ${verifier}\n` +
+                   `--------------------------------------------\n` +
+                   `Status: WAITING FOR DOCK ASSIGNMENT`;
+    sendWANotification(ID_GROUP_OPS, msgOps);
 
     return true;
 };
 
+// --- 3. TEMPLATE: PANGGILAN DRIVER (CALL_DRIVER) ---
 export const callDriver = async (id: string, caller: string, gate: string): Promise<boolean> => {
     const { data: driver } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!driver) return false;
@@ -143,11 +192,24 @@ export const callDriver = async (id: string, caller: string, gate: string): Prom
     if (error) return false;
 
     if (driver.phone) {
-        sendWANotification(driver.phone, `PANGGILAN ANTRIAN 📢\n\nHalo ${driver.name},\nSilakan merapat ke ${gate.replace('_', ' ')} SEKARANG.\nTim bongkar muat sudah menunggu.`);
+        // [TEMPLATE 4: CALL_DRIVER]
+        const msg = `PANGGILAN BONGKAR MUAT\n\n` +
+                    `Kepada Sdr. ${driver.name},\n\n` +
+                    `Giliran Anda telah tiba.\n` +
+                    `--------------------------------------------\n` +
+                    `Nomor Antrian : ${driver.queue_number || '-'}\n` +
+                    `Lokasi Tujuan : ${gate.replace(/_/g, ' ')}\n` +
+                    `Waktu Panggil : ${formatTime(Date.now())}\n` +
+                    `--------------------------------------------\n\n` +
+                    `MOHON SEGERA MERAPAT KE LOKASI.\n` +
+                    `Petugas checker sudah menunggu.\n\n` +
+                    `Sociolla Warehouse Management`;
+        sendWANotification(driver.phone, msg);
     }
     return true;
 };
 
+// --- 4. TEMPLATE: CHECKOUT (CHECKOUT_SUCCESS) ---
 export const checkoutDriver = async (id: string, verifier: string, notes: string, photos: string[]): Promise<boolean> => {
     const { data: driver } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!driver) return false;
@@ -156,25 +218,54 @@ export const checkoutDriver = async (id: string, verifier: string, notes: string
     const { error } = await supabase.from('drivers').update({
         status: QueueStatus.COMPLETED, 
         exit_time: now,
-        notes: notes, // ✅ FIX: Ubah remarks -> notes (Catatan Keluar)
+        notes: notes,
         exit_verified_by: verifier, 
         photo_after_urls: photos
     }).eq('id', id);
 
     if (error) return false;
 
-    if (driver.phone) sendWANotification(driver.phone, `CHECKOUT BERHASIL ✅\nTerima kasih ${driver.name}!\n\nWaktu Keluar: ${formatDate(now)}`);
+    if (driver.phone) {
+        // [TEMPLATE 5: CHECKOUT_SUCCESS]
+        const msg = `SURAT JALAN KELUAR (EXIT PASS)\n\n` +
+                    `Proses operasional telah selesai.\n` +
+                    `--------------------------------------------\n` +
+                    `Nama Driver   : ${driver.name}\n` +
+                    `Plat Nomor    : ${driver.license_plate}\n` +
+                    `Waktu Keluar  : ${formatTime(now)}\n` +
+                    `Petugas       : ${verifier}\n` +
+                    `--------------------------------------------\n\n` +
+                    `Terima kasih telah mematuhi aturan K3.\n` +
+                    `Hati-hati di jalan.\n\n` +
+                    `Sociolla Warehouse Management`;
+        sendWANotification(driver.phone, msg);
+    }
     return true;
 };
 
+// --- 5. TEMPLATE: PENOLAKAN (BOOKING_REJECTED) ---
 export const rejectDriver = async (id: string, reason: string, verifier: string): Promise<boolean> => {
     const { data: d } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!d) return false;
     await supabase.from('drivers').update({ status: 'REJECTED', rejection_reason: reason, verified_by: verifier }).eq('id', id);
-    if (d.phone) sendWANotification(d.phone, `BOOKING DITOLAK ❌\n\n🛑 Alasan: "${reason}"`);
+    
+    if (d.phone) {
+        // [TEMPLATE 7: BOOKING_REJECTED]
+        const msg = `STATUS BOOKING: DITOLAK\n\n` +
+                    `Mohon maaf, kendaraan Anda tidak diizinkan masuk.\n` +
+                    `--------------------------------------------\n` +
+                    `Plat Nomor    : ${d.license_plate}\n` +
+                    `Waktu         : ${formatTime(Date.now())}\n` +
+                    `Alasan        : ${reason}\n` +
+                    `--------------------------------------------\n\n` +
+                    `Silakan hubungi PIC terkait untuk info lebih lanjut.\n` +
+                    `Sociolla Warehouse Management`;
+        sendWANotification(d.phone, msg);
+    }
     return true;
 };
 
+// ... (Sisa fungsi lain: getAvailableSlots, confirmArrivalCheckIn, dll biarkan seperti semula)
 export const getAvailableSlots = async (date: string): Promise<SlotInfo[]> => {
     const dayOfWeek = new Date(date + 'T00:00:00').getDay(); 
     if (dayOfWeek === 0) return []; 
@@ -212,10 +303,9 @@ export const findBookingByPlateOrPhone = async (query: string): Promise<DriverDa
 export const confirmArrivalCheckIn = async (id: string, notes: string, editData?: Partial<DriverData>, newDoc?: string): Promise<DriverData> => {
     const updates: any = { 
         status: QueueStatus.AT_GATE, 
-        notes: notes, // ✅ FIX: Ubah remarks -> notes (agar sesuai kolom DB)
+        notes: notes, 
         arrived_at_gate_time: Date.now() 
     };
-    
     if (editData) {
         if(editData.name) updates.name = editData.name;
         if(editData.licensePlate) updates.license_plate = editData.licensePlate;
@@ -223,13 +313,8 @@ export const confirmArrivalCheckIn = async (id: string, notes: string, editData?
         if(editData.company) updates.company = editData.company;
     }
     if (newDoc) updates.document_file = newDoc;
-
     const { data, error } = await supabase.from('drivers').update(updates).eq('id', id).select().single();
-    // Debugging agar tahu error detail jika masih gagal
-    if (error) {
-        console.error("Arrival Update Error:", error);
-        throw new Error("Gagal update arrival: " + error.message);
-    }
+    if (error) throw new Error("Gagal update arrival: " + error.message);
     return mapSupabaseToDriver(data);
 };
 
@@ -247,10 +332,7 @@ export const scanDriverQR = async (code: string): Promise<DriverData | null> => 
     return mapSupabaseToDriver(data);
 };
 
-// ============================================================================
-// 🔥 AUTH & SECURITY
-// ============================================================================
-
+// AUTH & SECURITY (Hardcoded untuk contoh)
 const HARDCODED_USERS: UserProfile[] = [
     { id: 'SECURITY', name: 'Pak Satpam', role: 'SECURITY', pin_code: '1234', status: 'ACTIVE' },
     { id: 'ADMIN', name: 'Admin Ops', role: 'ADMIN', pin_code: '1234', status: 'ACTIVE' },
@@ -276,64 +358,21 @@ export const verifyDivisionCredential = async (id: string, pass: string): Promis
     return { id: user.id, name: user.role, role: user.role as any, password: user.pin_code, theme: 'blue' };
 };
 
-// ============================================================================
-// 🔥 ADMIN / COMMAND CENTER FEATURES
-// ============================================================================
-
 export const getGateConfigs = async (): Promise<GateConfig[]> => {
     const { data } = await supabase.from('gate_configs').select('*').order('gate_id', { ascending: true });
     return (data || []).map((g: any) => ({ 
-        id: g.id, 
-        name: g.name, 
-        capacity: g.capacity, 
-        status: g.status, 
-        type: g.type 
+        id: g.id, name: g.name, capacity: g.capacity, status: g.status, type: g.type 
     }));
 };
 
 export const saveGateConfig = async (gate: GateConfig): Promise<boolean> => {
     const { error } = await supabase.from('gate_configs').upsert({
-        gate_id: gate.id,
-        name: gate.name,
-        capacity: gate.capacity,
-        status: gate.status,
-        type: gate.type
+        gate_id: gate.id, name: gate.name, capacity: gate.capacity, status: gate.status, type: gate.type
     }, { onConflict: 'gate_id' });
     return !error;
 };
 
-export const deleteSystemSetting = async (id: string): Promise<boolean> => {
-    const { error } = await supabase.from('gate_configs').delete().eq('id', id);
-    return !error;
-};
-
-// Developer Config
-export interface DevConfig { enableGpsBypass: boolean; enableMockOCR: boolean; }
-export const getDevConfig = (): DevConfig => {
-    if (typeof window === 'undefined') return { enableGpsBypass: false, enableMockOCR: false };
-    try {
-        const stored = localStorage.getItem(DEV_CONFIG_KEY);
-        return stored ? JSON.parse(stored) : { enableGpsBypass: false, enableMockOCR: false };
-    } catch (e) { return { enableGpsBypass: false, enableMockOCR: false }; }
-};
-export const saveDevConfig = (config: DevConfig): void => {
-    if (typeof window !== 'undefined') localStorage.setItem(DEV_CONFIG_KEY, JSON.stringify(config));
-};
-
-// Stubs & Utils
 export const getActivityLogs = async (): Promise<ActivityLog[]> => { 
     const { data } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
     return data || []; 
 };
-
-export const wipeDatabase = async (): Promise<void> => { console.log("Wipe DB stub"); };
-export const seedDummyData = async (): Promise<void> => { console.log("Seed Data stub"); };
-export const exportDatabase = (): string => { return "{}"; };
-export const importDatabase = (json: string): boolean => { console.log("Import stub"); return true; };
-export const getProfiles = async (): Promise<UserProfile[]> => { return HARDCODED_USERS; };
-export const addProfile = async (profile: UserProfile): Promise<boolean> => { console.log("Add profile stub", profile); return true; };
-export const updateProfile = async (profile: UserProfile): Promise<boolean> => { console.log("Update profile stub", profile); return true; };
-export const deleteProfile = async (id: string): Promise<boolean> => { console.log("Delete profile stub", id); return true; };
-export const getDivisions = async (): Promise<DivisionConfig[]> => { return []; };
-export const saveDivision = async (div: DivisionConfig): Promise<boolean> => { console.log("Save div stub", div); return true; };
-export const deleteDivision = async (id: string): Promise<boolean> => { console.log("Delete div stub", id); return true; };
