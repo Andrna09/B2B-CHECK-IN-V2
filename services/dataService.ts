@@ -1,8 +1,8 @@
 import { supabase } from './supabaseClient';
 import { DriverData, QueueStatus, UserProfile, GateConfig, SlotInfo, DivisionConfig, ActivityLog } from '../types';
 
-// ID GROUP WA OPERASIONAL (Ganti dengan ID Grup Asli)
-const ID_GROUP_OPS = '120363423657558569@g.us'; 
+// KONFIGURASI GRUP WA & SISTEM
+const ID_GROUP_OPS = '120363423657558569@g.us'; // Ganti dengan ID Grup Asli Anda
 const DEV_CONFIG_KEY = 'yms_dev_config';
 
 // --- HELPER UTILS ---
@@ -14,10 +14,14 @@ const formatDateLocal = (ts: number | string) => {
     return new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
+// Fungsi Kirim WA Universal (Pembersih Nomor HP)
 const sendWANotification = async (target: string, message: string) => {
     if (!target) return;
     try {
-        const cleanTarget = target.replace(/[^0-9@g.us]/g, '');
+        // Bersihkan nomor HP (hapus karakter aneh, ganti 0 jadi 62)
+        let cleanTarget = target.replace(/\D/g, '');
+        if (cleanTarget.startsWith('0')) cleanTarget = '62' + cleanTarget.slice(1);
+        
         await fetch('/api/whatsapp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -27,13 +31,13 @@ const sendWANotification = async (target: string, message: string) => {
 };
 
 // ============================================================================
-// 🔥 MAIN FUNCTIONS (DRIVER & FLOW)
+// 🔥 DATA MAPPING (Mencegah Null pada Plat Nomor)
 // ============================================================================
 
 const mapSupabaseToDriver = (data: any): DriverData => ({
     id: data.id,
     name: data.name,
-    licensePlate: data.license_plate,
+    licensePlate: data.license_plate, // Pastikan field ini sesuai dengan kolom di Supabase
     company: data.company,
     status: data.status as QueueStatus,
     checkInTime: data.check_in_time,
@@ -60,8 +64,16 @@ export const getDriverById = async (id: string): Promise<DriverData | null> => {
     return mapSupabaseToDriver(data);
 };
 
-// [TEMPLATE 1: CONFIRM_BOOKING]
+// ============================================================================
+// 🔥 MAIN FLOW FUNCTIONS (DENGAN WA NOTIFIKASI)
+// ============================================================================
+
+// 1. CREATE BOOKING
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
+    // FIX: Ambil plat nomor dari field manapun yang tersedia (camelCase atau snake_case)
+    const plateNumber = data.licensePlate || (data as any).license_plate || '-';
+    const nameStr = data.name || 'Driver';
+
     const nowObj = new Date();
     const period = `${nowObj.getFullYear()}${String(nowObj.getMonth() + 1).padStart(2, '0')}`;
     const prefix = `SOC-IN-${period}-`;
@@ -83,8 +95,8 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
     const now = Date.now();
 
     const { data: insertedData, error } = await supabase.from('drivers').insert([{
-        name: data.name, 
-        license_plate: data.license_plate, 
+        name: nameStr, 
+        license_plate: plateNumber, // Gunakan variabel yang sudah diamankan
         company: data.company, 
         phone: data.phone,
         status: QueueStatus.BOOKED, 
@@ -102,17 +114,14 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
 
     if (data.phone) {
         const msg = `KONFIRMASI BOOKING BERHASIL\n\n` +
-                    `Halo ${data.name},\n\n` +
+                    `Halo ${nameStr},\n\n` +
                     `Booking Anda telah terdaftar:\n` +
                     `--------------------------------------------\n` +
                     `Kode Booking  : ${code}\n` +
-                    `Plat Nomor    : ${data.license_plate}\n` +
+                    `Plat Nomor    : ${plateNumber}\n` + // Menggunakan variabel plateNumber
                     `Jadwal        : ${data.slotDate || '-'} [${data.slotTime || '-'}]\n` +
-                    `Jenis Muatan  : ${data.purpose || 'Logistik'}\n` +
                     `--------------------------------------------\n\n` +
-                    `PENTING:\n` +
-                    `- Tiba 15 menit sebelum jadwal\n` +
-                    `- Siapkan dokumen: SJ, Invoice, KTP\n\n` +
+                    `Harap tiba 15 menit sebelum jadwal.\n` +
                     `Sociolla Warehouse Management`;
         sendWANotification(data.phone, msg);
     }
@@ -120,7 +129,7 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
     return mapSupabaseToDriver(insertedData);
 };
 
-// [TEMPLATE 2 & 3: TICKET_QUEUE & NOTIF_OPS]
+// 2. VERIFY DRIVER (TIKET MASUK)
 export const verifyDriver = async (id: string, verifier: string, notes: string, photos: string[]): Promise<boolean> => {
     const { data: driver } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!driver) return false;
@@ -147,34 +156,29 @@ export const verifyDriver = async (id: string, verifier: string, notes: string, 
     if (driver.phone) {
         const msgDriver = `TIKET ANTRIAN ANDA\n\n` +
                           `Nomor Antrian : ${queueNo}\n` +
+                          `Plat Nomor    : ${driver.license_plate}\n` +
                           `Status        : ENTRY APPROVED\n` +
                           `Waktu Masuk   : ${formatTime(now)}\n` +
                           `--------------------------------------------\n` +
-                          `INSTRUKSI:\n` +
-                          `1. Parkir di area tunggu yang tersedia\n` +
-                          `2. Tunggu panggilan via WhatsApp/Monitor\n` +
-                          `3. Dilarang meninggalkan area gudang\n\n` +
+                          `Silakan parkir dan tunggu panggilan.\n` +
                           `Sociolla Warehouse Management`;
         sendWANotification(driver.phone, msgDriver);
     }
-
-    // B. Pesan ke GRUP OPS
+    
+    // B. Notif ke Group Admin OPS
     const msgOps = `NOTIFIKASI KEDATANGAN (INBOUND)\n` +
                    `--------------------------------------------\n` +
                    `Antrian      : ${queueNo}\n` +
-                   `Vendor       : ${driver.company}\n` +
                    `Plat Nomor   : ${driver.license_plate}\n` +
-                   `Driver       : ${driver.name}\n` +
-                   `Jam Masuk    : ${formatTime(now)}\n` +
-                   `Security     : ${verifier}\n` +
-                   `--------------------------------------------\n` +
-                   `Status: WAITING FOR DOCK ASSIGNMENT`;
+                   `Vendor       : ${driver.company}\n` +
+                   `Status       : WAITING DOCK\n` +
+                   `--------------------------------------------`;
     sendWANotification(ID_GROUP_OPS, msgOps);
 
     return true;
 };
 
-// [TEMPLATE 4: CALL_DRIVER]
+// 3. CALL DRIVER (PANGGILAN)
 export const callDriver = async (id: string, caller: string, gate: string): Promise<boolean> => {
     const { data: driver } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!driver) return false;
@@ -190,22 +194,19 @@ export const callDriver = async (id: string, caller: string, gate: string): Prom
 
     if (driver.phone) {
         const msg = `PANGGILAN BONGKAR MUAT\n\n` +
-                    `Kepada Sdr. ${driver.name},\n\n` +
+                    `Kepada: ${driver.name} (${driver.license_plate})\n\n` +
                     `Giliran Anda telah tiba.\n` +
                     `--------------------------------------------\n` +
-                    `Nomor Antrian : ${driver.queue_number || '-'}\n` +
-                    `Lokasi Tujuan : ${gate.replace(/_/g, ' ')}\n` +
-                    `Waktu Panggil : ${formatTime(Date.now())}\n` +
+                    `LOKASI TUJUAN : ${gate.replace(/_/g, ' ')}\n` +
                     `--------------------------------------------\n\n` +
-                    `MOHON SEGERA MERAPAT KE LOKASI.\n` +
-                    `Petugas checker sudah menunggu.\n\n` +
+                    `MOHON SEGERA MERAPAT KE DOCK.\n` +
                     `Sociolla Warehouse Management`;
         sendWANotification(driver.phone, msg);
     }
     return true;
 };
 
-// [TEMPLATE 5: CHECKOUT_SUCCESS]
+// 4. CHECKOUT
 export const checkoutDriver = async (id: string, verifier: string, notes: string, photos: string[]): Promise<boolean> => {
     const { data: driver } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!driver) return false;
@@ -223,22 +224,17 @@ export const checkoutDriver = async (id: string, verifier: string, notes: string
 
     if (driver.phone) {
         const msg = `SURAT JALAN KELUAR (EXIT PASS)\n\n` +
-                    `Proses operasional telah selesai.\n` +
-                    `--------------------------------------------\n` +
-                    `Nama Driver   : ${driver.name}\n` +
                     `Plat Nomor    : ${driver.license_plate}\n` +
                     `Waktu Keluar  : ${formatTime(now)}\n` +
-                    `Petugas       : ${verifier}\n` +
-                    `--------------------------------------------\n\n` +
-                    `Terima kasih telah mematuhi aturan K3.\n` +
-                    `Hati-hati di jalan.\n\n` +
+                    `--------------------------------------------\n` +
+                    `Terima kasih, hati-hati di jalan.\n` +
                     `Sociolla Warehouse Management`;
         sendWANotification(driver.phone, msg);
     }
     return true;
 };
 
-// [TEMPLATE 7: BOOKING_REJECTED]
+// 5. REJECT
 export const rejectDriver = async (id: string, reason: string, verifier: string): Promise<boolean> => {
     const { data: d } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!d) return false;
@@ -246,31 +242,22 @@ export const rejectDriver = async (id: string, reason: string, verifier: string)
     
     if (d.phone) {
         const msg = `STATUS BOOKING: DITOLAK\n\n` +
-                    `Mohon maaf, kendaraan Anda tidak diizinkan masuk.\n` +
-                    `--------------------------------------------\n` +
                     `Plat Nomor    : ${d.license_plate}\n` +
-                    `Waktu         : ${formatTime(Date.now())}\n` +
                     `Alasan        : ${reason}\n` +
-                    `--------------------------------------------\n\n` +
-                    `Silakan hubungi PIC terkait untuk info lebih lanjut.\n` +
+                    `--------------------------------------------\n` +
                     `Sociolla Warehouse Management`;
         sendWANotification(d.phone, msg);
     }
     return true;
 };
 
+// --- FUNGSI PENDUKUNG LAINNYA ---
 export const getAvailableSlots = async (date: string): Promise<SlotInfo[]> => {
     const dayOfWeek = new Date(date + 'T00:00:00').getDay(); 
     if (dayOfWeek === 0) return []; 
-
     const baseSlots = ["08:00 - 09:00", "09:00 - 10:00", "10:00 - 11:00", "11:00 - 12:00", "12:00 - 13:00", "13:00 - 14:00", "14:00 - 15:00", "15:00 - 16:00", "16:00 - 17:00"];
-    let activeSlots = baseSlots;
-
-    if (dayOfWeek === 5) activeSlots = baseSlots.filter(t => !t.startsWith("11:00") && !t.startsWith("12:00"));
-    else activeSlots = baseSlots.filter(t => !t.startsWith("12:00"));
-
+    let activeSlots = dayOfWeek === 5 ? baseSlots.filter(t => !t.startsWith("11:00") && !t.startsWith("12:00")) : baseSlots.filter(t => !t.startsWith("12:00"));
     const { data } = await supabase.from('drivers').select('slot_time').eq('slot_date', date);
-    
     return activeSlots.map(t => {
         const booked = data?.filter((d:any) => d.slot_time === t).length || 0;
         return { id: t, timeLabel: t, capacity: 3, booked: booked, isAvailable: booked < 3 };
@@ -284,21 +271,13 @@ export const findBookingByCode = async (code: string): Promise<DriverData | null
 };
 
 export const findBookingByPlateOrPhone = async (query: string): Promise<DriverData | null> => {
-    const { data } = await supabase.from('drivers').select('*')
-        .or(`license_plate.ilike.%${query}%,phone.ilike.%${query}%`)
-        .eq('status', 'BOOKED')
-        .limit(1)
-        .single();
+    const { data } = await supabase.from('drivers').select('*').or(`license_plate.ilike.%${query}%,phone.ilike.%${query}%`).eq('status', 'BOOKED').limit(1).single();
     if (!data) return null;
     return mapSupabaseToDriver(data);
 };
 
 export const confirmArrivalCheckIn = async (id: string, notes: string, editData?: Partial<DriverData>, newDoc?: string): Promise<DriverData> => {
-    const updates: any = { 
-        status: QueueStatus.AT_GATE, 
-        notes: notes, 
-        arrived_at_gate_time: Date.now() 
-    };
+    const updates: any = { status: QueueStatus.AT_GATE, notes: notes, arrived_at_gate_time: Date.now() };
     if (editData) {
         if(editData.name) updates.name = editData.name;
         if(editData.licensePlate) updates.license_plate = editData.licensePlate;
@@ -307,7 +286,7 @@ export const confirmArrivalCheckIn = async (id: string, notes: string, editData?
     }
     if (newDoc) updates.document_file = newDoc;
     const { data, error } = await supabase.from('drivers').update(updates).eq('id', id).select().single();
-    if (error) throw new Error("Gagal update arrival: " + error.message);
+    if (error) throw new Error("Update Error: " + error.message);
     return mapSupabaseToDriver(data);
 };
 
@@ -317,93 +296,28 @@ export const updateDriverStatus = async (id: string, status: QueueStatus): Promi
 };
 
 export const scanDriverQR = async (code: string): Promise<DriverData | null> => {
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
     let query = supabase.from('drivers').select('*');
-    if (isUUID) { query = query.eq('id', code); } else { query = query.eq('booking_code', code); }
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(code)) query = query.eq('id', code); else query = query.eq('booking_code', code);
     const { data } = await query.single();
     if (!data) return null;
     return mapSupabaseToDriver(data);
 };
 
-// ============================================================================
-// 🔥 AUTH & SECURITY
-// ============================================================================
-
-const HARDCODED_USERS: UserProfile[] = [
-    { id: 'SECURITY', name: 'Pak Satpam', role: 'SECURITY', pin_code: '1234', status: 'ACTIVE' },
-    { id: 'ADMIN', name: 'Admin Ops', role: 'ADMIN', pin_code: '1234', status: 'ACTIVE' },
-    { id: 'MANAGER', name: 'Manager Logistik', role: 'MANAGER', pin_code: '1234', status: 'ACTIVE' }
-];
-
-export const loginSystem = async (id: string, pass: string): Promise<UserProfile> => {
-    await new Promise(r => setTimeout(r, 500)); 
-    const cleanId = id.trim().toUpperCase();
-    const cleanPass = pass.trim();
-    const user = HARDCODED_USERS.find(u => u.id === cleanId);
-    if (!user) throw new Error("Username/ID tidak ditemukan.");
-    if (user.pin_code !== cleanPass) throw new Error("PIN/Password salah.");
-    return user;
-};
-
-export const verifyDivisionCredential = async (id: string, pass: string): Promise<DivisionConfig | null> => {
-    const cleanId = id.trim().toUpperCase();
-    const cleanPass = pass.trim();
-    const user = HARDCODED_USERS.find(u => u.id === cleanId);
-    if (!user) throw new Error("ID Divisi tidak terdaftar.");
-    if (user.pin_code !== cleanPass) throw new Error("Password Divisi salah.");
-    return { id: user.id, name: user.role, role: user.role as any, password: user.pin_code, theme: 'blue' };
-};
-
-// ============================================================================
-// 🔥 ADMIN / COMMAND CENTER FEATURES
-// ============================================================================
-
+// GATE & USERS
 export const getGateConfigs = async (): Promise<GateConfig[]> => {
     const { data } = await supabase.from('gate_configs').select('*').order('gate_id', { ascending: true });
-    return (data || []).map((g: any) => ({ 
-        id: g.id, name: g.name, capacity: g.capacity, status: g.status, type: g.type 
-    }));
+    return (data || []).map((g: any) => ({ id: g.id, name: g.name, capacity: g.capacity, status: g.status, type: g.type }));
 };
-
 export const saveGateConfig = async (gate: GateConfig): Promise<boolean> => {
-    const { error } = await supabase.from('gate_configs').upsert({
-        gate_id: gate.id, name: gate.name, capacity: gate.capacity, status: gate.status, type: gate.type
-    }, { onConflict: 'gate_id' });
+    const { error } = await supabase.from('gate_configs').upsert({ gate_id: gate.id, name: gate.name, capacity: gate.capacity, status: gate.status, type: gate.type }, { onConflict: 'gate_id' });
     return !error;
 };
-
-export const deleteSystemSetting = async (id: string): Promise<boolean> => {
-    const { error } = await supabase.from('gate_configs').delete().eq('id', id);
-    return !error;
+export const loginSystem = async (id: string, pass: string): Promise<UserProfile> => {
+    if (id.toUpperCase() === 'ADMIN' && pass === '1234') return { id: 'ADMIN', name: 'Admin Ops', role: 'ADMIN', pin_code: '1234', status: 'ACTIVE' };
+    throw new Error("Invalid Credentials");
 };
-
-// Developer Config
-export interface DevConfig { enableGpsBypass: boolean; enableMockOCR: boolean; }
-export const getDevConfig = (): DevConfig => {
-    if (typeof window === 'undefined') return { enableGpsBypass: false, enableMockOCR: false };
-    try {
-        const stored = localStorage.getItem(DEV_CONFIG_KEY);
-        return stored ? JSON.parse(stored) : { enableGpsBypass: false, enableMockOCR: false };
-    } catch (e) { return { enableGpsBypass: false, enableMockOCR: false }; }
+export const verifyDivisionCredential = async (id: string, pass: string): Promise<DivisionConfig | null> => {
+    if (id.toUpperCase() === 'SECURITY' && pass === '1234') return { id: 'SECURITY', name: 'Security Guard', role: 'SECURITY', password: '1234', theme: 'blue' };
+    return null;
 };
-export const saveDevConfig = (config: DevConfig): void => {
-    if (typeof window !== 'undefined') localStorage.setItem(DEV_CONFIG_KEY, JSON.stringify(config));
-};
-
-// Stubs & Utils
-export const getActivityLogs = async (): Promise<ActivityLog[]> => { 
-    const { data } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
-    return data || []; 
-};
-
-export const wipeDatabase = async (): Promise<void> => { console.log("Wipe DB stub"); };
-export const seedDummyData = async (): Promise<void> => { console.log("Seed Data stub"); };
-export const exportDatabase = (): string => { return "{}"; };
-export const importDatabase = (json: string): boolean => { console.log("Import stub"); return true; };
-export const getProfiles = async (): Promise<UserProfile[]> => { return HARDCODED_USERS; };
-export const addProfile = async (profile: UserProfile): Promise<boolean> => { console.log("Add profile stub", profile); return true; };
-export const updateProfile = async (profile: UserProfile): Promise<boolean> => { console.log("Update profile stub", profile); return true; };
-export const deleteProfile = async (id: string): Promise<boolean> => { console.log("Delete profile stub", id); return true; };
-export const getDivisions = async (): Promise<DivisionConfig[]> => { return []; };
-export const saveDivision = async (div: DivisionConfig): Promise<boolean> => { console.log("Save div stub", div); return true; };
-export const deleteDivision = async (id: string): Promise<boolean> => { console.log("Delete div stub", id); return true; };
+export const getActivityLogs = async (): Promise<ActivityLog[]> => { return []; };
