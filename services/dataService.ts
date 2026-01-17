@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient';
 import { DriverData, QueueStatus, UserProfile, GateConfig, SlotInfo, DivisionConfig, ActivityLog } from '../types';
 
 // KONFIGURASI GRUP WA & SISTEM
-const ID_GROUP_OPS = '120363423657558569@g.us'; // Ganti dengan ID Grup Asli Anda
+const ID_GROUP_OPS = '120363423657558569@g.us'; // Ganti dengan ID Grup Asli
 const DEV_CONFIG_KEY = 'yms_dev_config';
 
 // --- HELPER UTILS ---
@@ -14,7 +14,7 @@ const formatDateLocal = (ts: number | string) => {
     return new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
-// Fungsi Kirim WA Universal (Pembersih Nomor HP)
+// Fungsi Kirim WA Universal
 const sendWANotification = async (target: string, message: string) => {
     if (!target) return;
     try {
@@ -31,13 +31,13 @@ const sendWANotification = async (target: string, message: string) => {
 };
 
 // ============================================================================
-// 🔥 DATA MAPPING (Mencegah Null pada Plat Nomor)
+// 🔥 DATA MAPPING
 // ============================================================================
 
 const mapSupabaseToDriver = (data: any): DriverData => ({
     id: data.id,
     name: data.name,
-    licensePlate: data.license_plate, // Pastikan field ini sesuai dengan kolom di Supabase
+    licensePlate: data.license_plate, // Pastikan mapping ini sesuai column DB
     company: data.company,
     status: data.status as QueueStatus,
     checkInTime: data.check_in_time,
@@ -65,14 +65,13 @@ export const getDriverById = async (id: string): Promise<DriverData | null> => {
 };
 
 // ============================================================================
-// 🔥 MAIN FLOW FUNCTIONS (DENGAN WA NOTIFIKASI)
+// 🔥 MAIN FLOW FUNCTIONS
 // ============================================================================
 
-// 1. CREATE BOOKING
+// 1. CREATE BOOKING (FIX BUG NULL LICENSE PLATE DISINI)
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
     // FIX: Ambil plat nomor dari field manapun yang tersedia (camelCase atau snake_case)
     const plateNumber = data.licensePlate || (data as any).license_plate || '-';
-    const nameStr = data.name || 'Driver';
 
     const nowObj = new Date();
     const period = `${nowObj.getFullYear()}${String(nowObj.getMonth() + 1).padStart(2, '0')}`;
@@ -95,7 +94,7 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
     const now = Date.now();
 
     const { data: insertedData, error } = await supabase.from('drivers').insert([{
-        name: nameStr, 
+        name: data.name, 
         license_plate: plateNumber, // Gunakan variabel yang sudah diamankan
         company: data.company, 
         phone: data.phone,
@@ -114,11 +113,11 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
 
     if (data.phone) {
         const msg = `KONFIRMASI BOOKING BERHASIL\n\n` +
-                    `Halo ${nameStr},\n\n` +
+                    `Halo ${data.name},\n\n` +
                     `Booking Anda telah terdaftar:\n` +
                     `--------------------------------------------\n` +
                     `Kode Booking  : ${code}\n` +
-                    `Plat Nomor    : ${plateNumber}\n` + // Menggunakan variabel plateNumber
+                    `Plat Nomor    : ${plateNumber}\n` + // Gunakan plateNumber yang aman
                     `Jadwal        : ${data.slotDate || '-'} [${data.slotTime || '-'}]\n` +
                     `--------------------------------------------\n\n` +
                     `Harap tiba 15 menit sebelum jadwal.\n` +
@@ -152,7 +151,6 @@ export const verifyDriver = async (id: string, verifier: string, notes: string, 
 
     if (error) return false;
 
-    // A. Pesan ke DRIVER
     if (driver.phone) {
         const msgDriver = `TIKET ANTRIAN ANDA\n\n` +
                           `Nomor Antrian : ${queueNo}\n` +
@@ -165,7 +163,7 @@ export const verifyDriver = async (id: string, verifier: string, notes: string, 
         sendWANotification(driver.phone, msgDriver);
     }
     
-    // B. Notif ke Group Admin OPS
+    // Notif ke Group Admin
     const msgOps = `NOTIFIKASI KEDATANGAN (INBOUND)\n` +
                    `--------------------------------------------\n` +
                    `Antrian      : ${queueNo}\n` +
