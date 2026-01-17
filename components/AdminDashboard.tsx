@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { getDrivers, callDriver, updateDriverStatus, rejectDriver, getGateConfigs } from '../services/dataService';
 import { DriverData, QueueStatus, GateConfig } from '../types';
 import { 
-  Truck, MapPin, Megaphone, X, Phone, ExternalLink, Loader2, Ban, Send,
-  FileText, Clock, CheckSquare, XCircle, Eye, AlertTriangle, Search, RefreshCw, LayoutGrid, List
+  Truck, MapPin, Megaphone, X, List, Phone, ExternalLink, Loader2, Ban, Send,
+  FileText, Clock, CheckSquare, XCircle, Eye, AlertTriangle, Search, RefreshCw, LayoutGrid
 } from 'lucide-react';
 import { getStatusLabel, getStatusColor } from '../utils/formatters';
 
