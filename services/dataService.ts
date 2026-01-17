@@ -6,12 +6,10 @@ const ID_GROUP_OPS = '120363423657558569@g.us';
 const DEV_CONFIG_KEY = 'yms_dev_config';
 
 // --- HELPER UTILS ---
-// Formatter waktu: "14:30 WIB"
 const formatTime = (ts: number | string) => {
     return new Date(ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
 };
 
-// Formatter tanggal: "18 Januari 2026"
 const formatDateLocal = (ts: number | string) => {
     return new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 };
@@ -62,7 +60,7 @@ export const getDriverById = async (id: string): Promise<DriverData | null> => {
     return mapSupabaseToDriver(data);
 };
 
-// --- 1. TEMPLATE: KONFIRMASI BOOKING (CONFIRM_BOOKING) ---
+// [TEMPLATE 1: CONFIRM_BOOKING]
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
     const nowObj = new Date();
     const period = `${nowObj.getFullYear()}${String(nowObj.getMonth() + 1).padStart(2, '0')}`;
@@ -103,7 +101,6 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
     if (error) { console.error("DB Error", error); return null; }
 
     if (data.phone) {
-        // [TEMPLATE 1: CONFIRM_BOOKING]
         const msg = `KONFIRMASI BOOKING BERHASIL\n\n` +
                     `Halo ${data.name},\n\n` +
                     `Booking Anda telah terdaftar:\n` +
@@ -123,7 +120,7 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
     return mapSupabaseToDriver(insertedData);
 };
 
-// --- 2. TEMPLATE: TIKET ANTRIAN & NOTIF OPS (TICKET_QUEUE & NOTIF_OPS) ---
+// [TEMPLATE 2 & 3: TICKET_QUEUE & NOTIF_OPS]
 export const verifyDriver = async (id: string, verifier: string, notes: string, photos: string[]): Promise<boolean> => {
     const { data: driver } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!driver) return false;
@@ -146,7 +143,7 @@ export const verifyDriver = async (id: string, verifier: string, notes: string, 
 
     if (error) return false;
 
-    // A. Pesan ke DRIVER (TICKET_QUEUE)
+    // A. Pesan ke DRIVER
     if (driver.phone) {
         const msgDriver = `TIKET ANTRIAN ANDA\n\n` +
                           `Nomor Antrian : ${queueNo}\n` +
@@ -161,7 +158,7 @@ export const verifyDriver = async (id: string, verifier: string, notes: string, 
         sendWANotification(driver.phone, msgDriver);
     }
 
-    // B. Pesan ke GRUP OPS (NOTIF_OPS)
+    // B. Pesan ke GRUP OPS
     const msgOps = `NOTIFIKASI KEDATANGAN (INBOUND)\n` +
                    `--------------------------------------------\n` +
                    `Antrian      : ${queueNo}\n` +
@@ -177,7 +174,7 @@ export const verifyDriver = async (id: string, verifier: string, notes: string, 
     return true;
 };
 
-// --- 3. TEMPLATE: PANGGILAN DRIVER (CALL_DRIVER) ---
+// [TEMPLATE 4: CALL_DRIVER]
 export const callDriver = async (id: string, caller: string, gate: string): Promise<boolean> => {
     const { data: driver } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!driver) return false;
@@ -192,7 +189,6 @@ export const callDriver = async (id: string, caller: string, gate: string): Prom
     if (error) return false;
 
     if (driver.phone) {
-        // [TEMPLATE 4: CALL_DRIVER]
         const msg = `PANGGILAN BONGKAR MUAT\n\n` +
                     `Kepada Sdr. ${driver.name},\n\n` +
                     `Giliran Anda telah tiba.\n` +
@@ -209,7 +205,7 @@ export const callDriver = async (id: string, caller: string, gate: string): Prom
     return true;
 };
 
-// --- 4. TEMPLATE: CHECKOUT (CHECKOUT_SUCCESS) ---
+// [TEMPLATE 5: CHECKOUT_SUCCESS]
 export const checkoutDriver = async (id: string, verifier: string, notes: string, photos: string[]): Promise<boolean> => {
     const { data: driver } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!driver) return false;
@@ -226,7 +222,6 @@ export const checkoutDriver = async (id: string, verifier: string, notes: string
     if (error) return false;
 
     if (driver.phone) {
-        // [TEMPLATE 5: CHECKOUT_SUCCESS]
         const msg = `SURAT JALAN KELUAR (EXIT PASS)\n\n` +
                     `Proses operasional telah selesai.\n` +
                     `--------------------------------------------\n` +
@@ -243,14 +238,13 @@ export const checkoutDriver = async (id: string, verifier: string, notes: string
     return true;
 };
 
-// --- 5. TEMPLATE: PENOLAKAN (BOOKING_REJECTED) ---
+// [TEMPLATE 7: BOOKING_REJECTED]
 export const rejectDriver = async (id: string, reason: string, verifier: string): Promise<boolean> => {
     const { data: d } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (!d) return false;
     await supabase.from('drivers').update({ status: 'REJECTED', rejection_reason: reason, verified_by: verifier }).eq('id', id);
     
     if (d.phone) {
-        // [TEMPLATE 7: BOOKING_REJECTED]
         const msg = `STATUS BOOKING: DITOLAK\n\n` +
                     `Mohon maaf, kendaraan Anda tidak diizinkan masuk.\n` +
                     `--------------------------------------------\n` +
@@ -265,7 +259,6 @@ export const rejectDriver = async (id: string, reason: string, verifier: string)
     return true;
 };
 
-// ... (Sisa fungsi lain: getAvailableSlots, confirmArrivalCheckIn, dll biarkan seperti semula)
 export const getAvailableSlots = async (date: string): Promise<SlotInfo[]> => {
     const dayOfWeek = new Date(date + 'T00:00:00').getDay(); 
     if (dayOfWeek === 0) return []; 
@@ -332,7 +325,10 @@ export const scanDriverQR = async (code: string): Promise<DriverData | null> => 
     return mapSupabaseToDriver(data);
 };
 
-// AUTH & SECURITY (Hardcoded untuk contoh)
+// ============================================================================
+// 🔥 AUTH & SECURITY
+// ============================================================================
+
 const HARDCODED_USERS: UserProfile[] = [
     { id: 'SECURITY', name: 'Pak Satpam', role: 'SECURITY', pin_code: '1234', status: 'ACTIVE' },
     { id: 'ADMIN', name: 'Admin Ops', role: 'ADMIN', pin_code: '1234', status: 'ACTIVE' },
@@ -358,6 +354,10 @@ export const verifyDivisionCredential = async (id: string, pass: string): Promis
     return { id: user.id, name: user.role, role: user.role as any, password: user.pin_code, theme: 'blue' };
 };
 
+// ============================================================================
+// 🔥 ADMIN / COMMAND CENTER FEATURES
+// ============================================================================
+
 export const getGateConfigs = async (): Promise<GateConfig[]> => {
     const { data } = await supabase.from('gate_configs').select('*').order('gate_id', { ascending: true });
     return (data || []).map((g: any) => ({ 
@@ -372,7 +372,38 @@ export const saveGateConfig = async (gate: GateConfig): Promise<boolean> => {
     return !error;
 };
 
+export const deleteSystemSetting = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from('gate_configs').delete().eq('id', id);
+    return !error;
+};
+
+// Developer Config
+export interface DevConfig { enableGpsBypass: boolean; enableMockOCR: boolean; }
+export const getDevConfig = (): DevConfig => {
+    if (typeof window === 'undefined') return { enableGpsBypass: false, enableMockOCR: false };
+    try {
+        const stored = localStorage.getItem(DEV_CONFIG_KEY);
+        return stored ? JSON.parse(stored) : { enableGpsBypass: false, enableMockOCR: false };
+    } catch (e) { return { enableGpsBypass: false, enableMockOCR: false }; }
+};
+export const saveDevConfig = (config: DevConfig): void => {
+    if (typeof window !== 'undefined') localStorage.setItem(DEV_CONFIG_KEY, JSON.stringify(config));
+};
+
+// Stubs & Utils
 export const getActivityLogs = async (): Promise<ActivityLog[]> => { 
     const { data } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
     return data || []; 
 };
+
+export const wipeDatabase = async (): Promise<void> => { console.log("Wipe DB stub"); };
+export const seedDummyData = async (): Promise<void> => { console.log("Seed Data stub"); };
+export const exportDatabase = (): string => { return "{}"; };
+export const importDatabase = (json: string): boolean => { console.log("Import stub"); return true; };
+export const getProfiles = async (): Promise<UserProfile[]> => { return HARDCODED_USERS; };
+export const addProfile = async (profile: UserProfile): Promise<boolean> => { console.log("Add profile stub", profile); return true; };
+export const updateProfile = async (profile: UserProfile): Promise<boolean> => { console.log("Update profile stub", profile); return true; };
+export const deleteProfile = async (id: string): Promise<boolean> => { console.log("Delete profile stub", id); return true; };
+export const getDivisions = async (): Promise<DivisionConfig[]> => { return []; };
+export const saveDivision = async (div: DivisionConfig): Promise<boolean> => { console.log("Save div stub", div); return true; };
+export const deleteDivision = async (id: string): Promise<boolean> => { console.log("Delete div stub", id); return true; };
