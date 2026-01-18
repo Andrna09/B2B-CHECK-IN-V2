@@ -101,27 +101,69 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
   return insertedData ? mapDatabaseToDriver(insertedData) : null;
 };
 
-// ... (approveBooking, rejectBooking, reviseAndCheckIn, rejectGate, getDrivers, etc. tetap sama)
-// Agar ringkas, bagian fungsi standar ini tidak saya ubah dari versi sebelumnya 
-// kecuali Anda mau saya tulis ulang full 100 baris ini juga.
-// Fokus utama update ada di `mapDatabaseToDriver` dan `createCheckIn` di atas.
-
+// --- FUNGSI APPROVE BOOKING (LOGIC BARU: SEQUENTIAL) ---
 export const approveBooking = async (id: string): Promise<boolean> => {
-    const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-    const random = Math.floor(1000 + Math.random() * 9000);
-    const code = `SOC-IN-${dateStr}-${random}`;
-    const { error } = await supabase.from('drivers').update({
-        status: QueueStatus.BOOKED,
-        booking_code: code,
-        admin_notes: 'Approved manually by Admin'
-    }).eq('id', id);
-    if (!error) {
-        const { data } = await supabase.from('drivers').select('phone, name').eq('id', id).single();
-        if (data?.phone) {
-             const msg = `*KONFIRMASI BOOKING BERHASIL*\n\nHalo ${data.name},\nKode Booking: *${code}*\n\nSilakan tunjukkan pesan ini ke Security saat tiba di lokasi.`;
-             await sendWhatsAppNotification(data.phone, msg);
+    // 1. Ambil data driver dulu untuk cek Purpose (Bongkar/Muat) & Nama/Phone
+    const { data: driver, error: fetchError } = await supabase
+        .from('drivers')
+        .select('purpose, name, phone')
+        .eq('id', id)
+        .single();
+
+    if (fetchError || !driver) {
+        console.error("Error fetching driver data:", fetchError);
+        return false;
+    }
+
+    // 2. Tentukan Prefix berdasarkan Logic Baru
+    // Format: SOC-[TIPE]-[TAHUN]-
+    const year = new Date().getFullYear(); // Contoh: 2026
+    const type = driver.purpose === 'UNLOADING' ? 'IN' : 'OUT';
+    const prefix = `SOC-${type}-${year}-`; // Contoh: SOC-IN-2026-
+
+    // 3. Cari nomor urut terakhir di database berdasarkan prefix tersebut
+    // Kita cari booking_code yang diawali dengan prefix ini, urutkan descending (terbesar)
+    const { data: latestEntry } = await supabase
+        .from('drivers')
+        .select('booking_code')
+        .ilike('booking_code', `${prefix}%`) // Filter SOC-IN-2026-%
+        .order('booking_code', { ascending: false })
+        .limit(1)
+        .single();
+
+    // 4. Hitung Sequence (Auto Increment)
+    let sequence = 1; // Default mulai dari 1
+    if (latestEntry && latestEntry.booking_code) {
+        // Ambil bagian angka terakhir (8 digit)
+        const parts = latestEntry.booking_code.split('-');
+        const lastNumStr = parts[parts.length - 1]; // "00000001"
+        const lastNum = parseInt(lastNumStr, 10);
+        
+        if (!isNaN(lastNum)) {
+            sequence = lastNum + 1;
         }
     }
+
+    // 5. Format Kode Final (Padding 8 Digit)
+    // Contoh: 1 -> "00000001"
+    const sequenceStr = sequence.toString().padStart(8, '0');
+    const finalCode = `${prefix}${sequenceStr}`; // SOC-IN-2026-00000001
+
+    // 6. Update Database
+    const { error } = await supabase.from('drivers').update({
+        status: QueueStatus.BOOKED,
+        booking_code: finalCode,
+        admin_notes: `Approved manually by Admin. Code: ${finalCode}`
+    }).eq('id', id);
+
+    // 7. Kirim Notifikasi WA (Jika sukses update)
+    if (!error) {
+        if (driver.phone) {
+             const msg = `*KONFIRMASI BOOKING BERHASIL*\n\nHalo ${driver.name},\nKode Booking: *${finalCode}*\n\nSilakan tunjukkan pesan ini ke Security saat tiba di lokasi.`;
+             await sendWhatsAppNotification(driver.phone, msg);
+        }
+    }
+
     return !error;
 };
 
@@ -130,6 +172,7 @@ export const rejectBooking = async (id: string, reason: string): Promise<boolean
         status: QueueStatus.REJECTED,
         rejection_reason: reason
     }).eq('id', id);
+
     if (!error) {
         const { data } = await supabase.from('drivers').select('phone, name').eq('id', id).single();
         if (data?.phone) await sendWhatsAppNotification(data.phone, `Mohon Maaf ${data.name},\nPendaftaran Anda DITOLAK.\nAlasan: ${reason}`);
@@ -148,6 +191,7 @@ export const reviseAndCheckIn = async (id: string, revisedData: {name: string, p
         verified_time: Date.now(),
         security_notes: 'Verified/Revised at Gate'
     }).eq('id', id);
+
     if (!error) {
         const { data } = await supabase.from('drivers').select('phone').eq('id', id).single();
         if (data?.phone) await sendWhatsAppNotification(data.phone, `CHECK-IN BERHASIL.\nNomor Antrian: *${queueNo}*.\nSilakan parkir dan tunggu panggilan.`);
@@ -185,6 +229,7 @@ export const updateDriverStatus = async (id: string, status: QueueStatus, gate?:
     }
     if (status === QueueStatus.LOADING) updates.loading_start_time = Date.now();
     if (status === QueueStatus.COMPLETED) updates.end_time = Date.now();
+    
     await supabase.from('drivers').update(updates).eq('id', id);
 };
 
@@ -195,10 +240,11 @@ export const checkoutDriver = async (id: string): Promise<void> => {
 };
 
 // ============================================================================
-// 2. AUTHENTICATION FUNCTIONS (PERBAIKAN UTAMA LOGIN ADMIN)
+// 2. AUTHENTICATION FUNCTIONS (SUDAH FIX)
 // ============================================================================
 
 export const verifyDivisionCredential = async (divId: string, password: string): Promise<DivisionConfig | null> => {
+    // 1. Cek apakah divisi ada di system_settings
     const { data } = await supabase
         .from('system_settings')
         .select('*')
@@ -208,7 +254,7 @@ export const verifyDivisionCredential = async (divId: string, password: string):
     
     if (!data) return null;
 
-    // Logic Role Dinamis (Fix Masalah "Salah Divisi")
+    // 2. Logic Role Dinamis (ADMIN vs SECURITY vs MANAGER)
     let role: 'SECURITY' | 'ADMIN' | 'MANAGER' = 'SECURITY';
     if (divId.includes('ADMIN')) role = 'ADMIN';
     if (divId.includes('MANAGER')) role = 'MANAGER';
@@ -223,11 +269,12 @@ export const verifyDivisionCredential = async (divId: string, password: string):
 };
 
 export const loginSystem = async (userId: string, pin: string): Promise<UserProfile | null> => {
+    // Cek user di tabel regular_drivers
     const { data } = await supabase
         .from('regular_drivers')
         .select('*')
         .eq('id', userId)
-        // .eq('pin_code', pin) // Uncomment di production
+        // .eq('pin_code', pin) // Uncomment jika ingin validasi PIN ketat
         .single();
 
     if (data) {
@@ -251,6 +298,7 @@ export const loginSystem = async (userId: string, pin: string): Promise<UserProf
 // 3. SYSTEM / ADMIN FUNCTIONS
 // ============================================================================
 
+// --- GATE CONFIGS ---
 export const getGateConfigs = async (): Promise<GateConfig[]> => {
   const { data, error } = await supabase.from('gate_configs').select('*').order('name', { ascending: true });
   if (error) return [];
@@ -262,6 +310,7 @@ export const saveGateConfig = async (config: Partial<GateConfig>): Promise<boole
   return !error;
 };
 
+// --- PROFILES (USERS) ---
 export const getProfiles = async (): Promise<UserProfile[]> => {
   const { data } = await supabase.from('regular_drivers').select('*');
   return (data as any) || [];
@@ -272,7 +321,7 @@ export const addProfile = async (profile: UserProfile): Promise<boolean> => {
       id: profile.id,
       name: profile.name,
       license_plate: 'STAFF', 
-      phone: profile.role
+      phone: profile.role // Simpan role di phone
   }]);
   return !error;
 };
@@ -290,6 +339,7 @@ export const deleteProfile = async (id: string): Promise<boolean> => {
   return !error;
 };
 
+// --- DIVISIONS ---
 export const getDivisions = async (): Promise<DivisionConfig[]> => {
     const { data } = await supabase.from('system_settings').select('*').eq('category', 'DIVISION');
     return (data || []).map((d: any) => ({
@@ -320,6 +370,7 @@ export const deleteSystemSetting = async (id: string): Promise<boolean> => {
     return !error;
 };
 
+// --- LOGS & UTILS ---
 export const getActivityLogs = async (): Promise<any[]> => {
   const { data } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(50);
   return data || [];
