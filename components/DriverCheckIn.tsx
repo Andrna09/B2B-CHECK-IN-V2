@@ -8,10 +8,8 @@ import { DriverData, QueueStatus } from '../types';
 import TicketPass from './TicketPass';
 
 // --- CONFIGURATION ---
-const ALLOWED_SLOTS = [
-  "08:00", "09:00", "10:00", "11:00", 
-  "13:00", "14:00", "15:00", "16:00"
-];
+// (Dihapus: Static ALLOWED_SLOTS)
+// (Diganti: Dynamic Logic di dalam component)
 
 const DriverCheckIn: React.FC = () => {
   // --- STATE MANAGEMENT ---
@@ -30,7 +28,7 @@ const DriverCheckIn: React.FC = () => {
     company: '',
     purpose: 'LOADING' as 'LOADING' | 'UNLOADING',
     poNumber: '',
-    gpsLat: 0, // Tetap simpan data lokasi (opsional)
+    gpsLat: 0, 
     gpsLong: 0
   });
 
@@ -45,6 +43,37 @@ const DriverCheckIn: React.FC = () => {
     sequence: '',
     manualValue: ''
   });
+
+  // --- LOGIC: HELPER UNTUK JADWAL ---
+  const getDailySlots = (dateString: string) => {
+      if (!dateString) return [];
+      
+      const date = new Date(dateString);
+      const day = date.getDay(); // 0 = Minggu, 1 = Senin, ... 6 = Sabtu
+
+      // SABTU (6) & MINGGU (0)
+      if (day === 0 || day === 6) {
+          return []; // Libur
+      }
+
+      // JUMAT (5)
+      // Aturan: 08, 09, 10, (Istirahat 11-13), 13, 14, 15, 16, 17
+      if (day === 5) {
+          return ["08:00", "09:00", "10:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+      }
+
+      // SENIN - KAMIS (1-4)
+      // Aturan: 08, 09, 10, 11, (Istirahat 12-13), 13, 14, 15, 16, 17
+      return ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+  };
+
+  const isWeekend = (dateString: string) => {
+      if (!dateString) return false;
+      const day = new Date(dateString).getDay();
+      return day === 0 || day === 6;
+  };
+
+  const currentSlots = getDailySlots(formData.visitDate);
 
   // --- LOGIC: PLATE NUMBER ---
   const handlePlateInputChange = (part: 'prefix' | 'number' | 'suffix', value: string) => {
@@ -85,8 +114,7 @@ const DriverCheckIn: React.FC = () => {
     setFormData(prev => ({ ...prev, phone: val }));
   };
 
-  // --- LOGIC: SILENT GPS (Optional Metadata) ---
-  // Kita tetap ambil lokasi jika browser mengizinkan, tapi TIDAK validasi jarak.
+  // --- LOGIC: SILENT GPS ---
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -97,10 +125,7 @@ const DriverCheckIn: React.FC = () => {
             gpsLong: position.coords.longitude 
           }));
         },
-        () => {
-            // User tolak GPS? Tidak masalah, lanjut saja.
-            console.log('User did not allow GPS, skipping location data.');
-        }
+        () => console.log('GPS skipped')
       );
     }
   }, []);
@@ -109,12 +134,12 @@ const DriverCheckIn: React.FC = () => {
   const validateStep = (currentStep: number) => {
     switch (currentStep) {
       case 1: // Schedule
-        return formData.visitDate && formData.slotTime;
+        return formData.visitDate && formData.slotTime && !isWeekend(formData.visitDate);
       case 2: // Identity
         return formData.name && formData.phone.length > 8 && 
                plateInputs.prefix && plateInputs.number && plateInputs.suffix && 
                formData.company;
-      case 3: // Cargo Only (GPS Removed)
+      case 3: // Cargo
         return formData.poNumber && formData.poNumber.length > 3;
       default:
         return false;
@@ -130,9 +155,7 @@ const DriverCheckIn: React.FC = () => {
         licensePlate: formData.licensePlate,
         company: formData.company,
         purpose: formData.purpose,
-        // Simpan info Slot & PO di notes
         notes: `PO: ${formData.poNumber} | Slot: ${formData.visitDate} @ ${formData.slotTime}`,
-        // Kirim koordinat jika ada, tapi tidak wajib
         adminNotes: formData.gpsLat ? `Booked from: ${formData.gpsLat}, ${formData.gpsLong}` : 'Location unknown'
       };
 
@@ -222,28 +245,44 @@ const DriverCheckIn: React.FC = () => {
                   className="w-full pl-12 p-4 bg-white rounded-xl border border-slate-200 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
                   value={formData.visitDate}
                   min={new Date().toISOString().split('T')[0]}
-                  onChange={e => setFormData({...formData, visitDate: e.target.value})}
+                  onChange={e => {
+                      setFormData({...formData, visitDate: e.target.value, slotTime: ''}); // Reset slot jika ganti tanggal
+                  }}
                 />
               </div>
             </div>
 
             <div>
               <label className="text-sm font-bold text-slate-500 mb-2 block">Pilih Jam (Estimasi)</label>
-              <div className="grid grid-cols-3 gap-3">
-                {ALLOWED_SLOTS.map(slot => (
-                  <button
-                    key={slot}
-                    onClick={() => setFormData({...formData, slotTime: slot})}
-                    className={`py-3 rounded-xl font-bold text-sm border-2 transition-all ${
-                      formData.slotTime === slot 
-                      ? 'border-blue-600 bg-blue-50 text-blue-700' 
-                      : 'border-transparent bg-white text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    {slot}
-                  </button>
-                ))}
-              </div>
+              
+              {/* REVISI LOGIC JADWAL */}
+              {isWeekend(formData.visitDate) ? (
+                  <div className="p-4 bg-red-50 rounded-xl border border-red-100 text-center">
+                      <p className="text-red-500 font-bold text-sm">Hari libur, silakan pilih tanggal lain.</p>
+                  </div>
+              ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    {currentSlots.length > 0 ? (
+                        currentSlots.map(slot => (
+                        <button
+                            key={slot}
+                            onClick={() => setFormData({...formData, slotTime: slot})}
+                            className={`py-3 rounded-xl font-bold text-sm border-2 transition-all ${
+                            formData.slotTime === slot 
+                            ? 'border-blue-600 bg-blue-50 text-blue-700' 
+                            : 'border-transparent bg-white text-slate-600 hover:bg-slate-100'
+                            }`}
+                        >
+                            {slot}
+                        </button>
+                        ))
+                    ) : (
+                        <div className="col-span-3 text-center py-4 text-slate-400 text-sm italic">
+                            Silakan pilih tanggal terlebih dahulu
+                        </div>
+                    )}
+                  </div>
+              )}
             </div>
           </div>
         )}
@@ -323,7 +362,7 @@ const DriverCheckIn: React.FC = () => {
           </div>
         )}
 
-        {/* STEP 3: MUATAN (GPS REMOVED) */}
+        {/* STEP 3: MUATAN */}
         {step === 3 && (
           <div className="space-y-6 animate-fade-in-up">
             
@@ -410,7 +449,6 @@ const DriverCheckIn: React.FC = () => {
               )}
             </div>
 
-            {/* Note: Bagian Geofencing/GPS telah dihapus sepenuhnya dari tampilan */}
             <div className="p-3 bg-slate-100 rounded-lg text-xs text-slate-500 text-center">
                 Pastikan data yang Anda isi sudah benar sebelum mengirim pendaftaran.
             </div>
