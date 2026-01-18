@@ -48,14 +48,7 @@ export enum QueueStatus {
   NO_SHOW = 'NO_SHOW'
 }
 
-export interface GateConfig {
-  id: string;
-  name: string;
-  status: 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE';
-  currentDriverId?: string;
-}
-
-// [FIX] INI YANG HILANG: Tambahkan Interface 'Gate' agar DriverStatus.tsx tidak error
+// [FIX FINAL] Definisi Gate yang lengkap dan bersih
 export interface Gate {
   id: string;
   name: string;
@@ -63,3 +56,6 @@ export interface Gate {
   type?: 'DOCK' | 'GENERAL';
   currentDriverId?: string;
 }
+
+// Alias agar kompatibel dengan kode lama yang pakai GateConfig
+export type GateConfig = Gate;
