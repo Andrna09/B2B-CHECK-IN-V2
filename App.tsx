@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Layout from './components/Layout'; // Pastikan import ini benar
+import Layout from './components/Layout'; 
 import DriverCheckIn from './components/DriverCheckIn';
 import DriverStatus from './components/DriverStatus';
 import AdminDashboard from './components/AdminDashboard';
@@ -108,6 +108,9 @@ const App: React.FC = () => {
     }
   };
 
+  // Helper untuk menentukan apakah view saat ini butuh Layout Admin (Sidebar)
+  const isAdminView = ['admin-dashboard', 'admin-reports'].includes(view);
+
   return (
     <>
         {isTransitioning && (
@@ -126,16 +129,20 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* Home / Landing Page */}
         {(view === 'home') && <LandingPage />}
 
+        {/* Logic Render Utama */}
         {view !== 'home' && view !== 'login' && (
-             ['public-monitor', 'system-manager', 'security-dashboard', 'system-overview'].includes(view) ? (
-               renderContent()
-             ) : (
-               <Layout currentView={view} onViewChange={setView} isAdmin={view.startsWith('admin')}>
+            isAdminView ? (
+              // Jika Admin View: Pakai Layout (Sidebar)
+              <Layout userRole="ADMIN" onLogout={handleLogout}>
                    {renderContent()}
-               </Layout>
-             )
+              </Layout>
+            ) : (
+              // Selain Admin (Security, Driver, Monitor): Render Langsung (Full Screen)
+              renderContent()
+            )
         )}
     </>
   );
