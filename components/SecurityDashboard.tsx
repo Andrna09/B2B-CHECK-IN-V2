@@ -1,173 +1,214 @@
 import React, { useState, useEffect } from 'react';
-import { getDrivers, verifyDriver, rejectDriver } from '../services/dataService';
-import { DriverData, QueueStatus, UserProfile } from '../types';
-import { Camera, X, LogIn, LogOut, Loader2, RefreshCw } from 'lucide-react';
+import { getDrivers, reviseAndCheckIn, rejectGate, checkoutDriver } from '../services/dataService';
+import { DriverData, QueueStatus } from '../types';
+import { Search, Edit2, CheckCircle, XCircle, LogOut } from 'lucide-react';
 
-interface Props { onBack?: () => void; currentUser?: UserProfile | null; }
-
-const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
+const SecurityDashboard: React.FC = () => {
   const [view, setView] = useState<'DASHBOARD' | 'VERIFY'>('DASHBOARD');
   const [drivers, setDrivers] = useState<DriverData[]>([]);
   const [scannedDriver, setScannedDriver] = useState<DriverData | null>(null);
-  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
-  const [manualIdInput, setManualIdInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'GATE_IN' | 'GATE_OUT'>('GATE_IN');
-  const [search, setSearch] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  
+  // STATE REVISI
+  const [isRevising, setIsRevising] = useState(false);
+  const [reviseForm, setReviseForm] = useState({ name: '', plate: '', company: '' });
 
-  // --- SAFE DATA FETCHING (ANTI BLANK) ---
   const fetchData = async () => {
-    try {
-        setIsLoading(true);
-        const data = await getDrivers();
-        if (Array.isArray(data)) {
-            setDrivers(data);
-        } else {
-            setDrivers([]); 
-        }
-    } catch (e) {
-        console.error("Gagal load driver:", e);
-        setDrivers([]);
-    } finally {
-        setIsLoading(false);
-    }
+      const data = await getDrivers();
+      setDrivers(data);
   };
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, [view]);
+      fetchData();
+      const interval = setInterval(fetchData, 10000);
+      return () => clearInterval(interval);
+  }, []);
 
-  // --- LOGIC ---
-  const handleManualSelect = (driver: DriverData) => {
-      setScannedDriver(driver);
-      setIsScanModalOpen(false);
-      setView('VERIFY');
+  // Simulasi Scan QR (Di lapangan pakai library QR Scanner)
+  const handleSimulateScan = (bookingCode: string) => {
+      const found = drivers.find(d => d.bookingCode === bookingCode && d.status === QueueStatus.BOOKED);
+      if (found) {
+          setScannedDriver(found);
+          setView('VERIFY');
+      } else {
+          alert('Data Booking Tidak Ditemukan atau Status Salah!');
+      }
   };
 
-  const handleVerify = async (approve: boolean) => {
-      if (!scannedDriver) return;
-      try {
-        if (approve) await verifyDriver(scannedDriver.id, currentUser?.name || 'Security', 'OK', []);
-        else await rejectDriver(scannedDriver.id, 'Ditolak Security', currentUser?.name || 'Security');
-        alert(approve ? "Driver berhasil diverifikasi ✅" : "Driver ditolak ❌");
-      } catch (e) {
-        alert("Gagal memproses data. Cek koneksi internet.");
-      }
+  // Logic Simpan Revisi
+  const handleSaveRevision = async () => {
+      if(!scannedDriver) return;
+      await reviseAndCheckIn(scannedDriver.id, reviseForm);
+      alert('Data Direvisi & Check-in Berhasil ✅');
+      setScannedDriver(null);
+      setIsRevising(false);
+      setView('DASHBOARD');
+      fetchData();
+  };
+
+  // Logic Approve Normal
+  const handleNormalApprove = async () => {
+      if(!scannedDriver) return;
+      // Gunakan data existing tanpa ubah
+      await reviseAndCheckIn(scannedDriver.id, {
+          name: scannedDriver.name,
+          plate: scannedDriver.licensePlate,
+          company: scannedDriver.company
+      });
+      alert('Check-in Berhasil ✅');
       setScannedDriver(null);
       setView('DASHBOARD');
-      fetchData(); 
+      fetchData();
   };
 
-  // --- SAFE FILTERING ---
-  const filteredList = (drivers || []).filter(d => {
-      if (!d) return false;
-      const match = (d.licensePlate || '').toUpperCase().includes(search.toUpperCase()) || 
-                    (d.name || '').toLowerCase().includes(search.toLowerCase());
-      
-      if (activeTab === 'GATE_IN') {
-          // ✅ FIX: Hapus CHECKED_IN agar driver yg sudah diapprove HILANG dari list Security
-          // Security hanya melihat yang statusnya BOOKED (Belum datang) atau AT_GATE (Sudah di gerbang)
-          return match && [QueueStatus.BOOKED, QueueStatus.AT_GATE].includes(d.status);
-      } else {
-          return match && d.status === QueueStatus.COMPLETED;
-      }
-  });
-
-  // --- RENDER VERIFY PAGE ---
+  // --- RENDER MODAL VERIFY (Fitur Utama Revisi Ada Disini) ---
   if (view === 'VERIFY' && scannedDriver) {
       return (
-          <div className="p-6 bg-slate-50 min-h-screen flex flex-col items-center pt-10 animate-fade-in-up">
-              <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl text-center border border-slate-100">
-                  <h2 className="text-4xl font-black text-slate-800 mb-2">{scannedDriver.licensePlate}</h2>
-                  <p className="text-lg font-bold text-slate-500 mb-1">{scannedDriver.name}</p>
-                  <p className="text-sm text-slate-400 mb-8">{scannedDriver.company}</p>
+          <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+              <div className="bg-white w-full max-w-md p-8 rounded-[2rem] shadow-2xl animate-fade-in-up">
                   
-                  <div className="grid grid-cols-2 gap-4">
-                      <button onClick={() => handleVerify(false)} className="py-4 bg-red-100 text-red-600 font-bold rounded-2xl hover:bg-red-200 transition-colors">
-                          TOLAK ⛔
-                      </button>
-                      <button onClick={() => handleVerify(true)} className="py-4 bg-emerald-500 text-white font-bold rounded-2xl shadow-lg hover:bg-emerald-600 transition-colors hover:scale-105 transform">
-                          IZINKAN MASUK ✅
-                      </button>
-                  </div>
-                  <button onClick={() => setView('DASHBOARD')} className="mt-6 text-slate-400 font-bold text-sm">Kembali</button>
+                  {isRevising ? (
+                      /* TAMPILAN MODE REVISI */
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-2 mb-2">
+                              <Edit2 className="w-6 h-6 text-blue-600"/>
+                              <h2 className="text-2xl font-black text-slate-800">Revisi Data</h2>
+                          </div>
+                          
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase">Plat Nomor</label>
+                              <input 
+                                  value={reviseForm.plate}
+                                  onChange={e => setReviseForm({...reviseForm, plate: e.target.value.toUpperCase()})}
+                                  className="w-full p-3 border-2 border-slate-200 rounded-xl font-black text-xl uppercase"
+                              />
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase">Nama Driver</label>
+                              <input 
+                                  value={reviseForm.name}
+                                  onChange={e => setReviseForm({...reviseForm, name: e.target.value})}
+                                  className="w-full p-3 border-2 border-slate-200 rounded-xl font-bold"
+                              />
+                          </div>
+
+                          <div className="flex gap-2 mt-6">
+                              <button onClick={() => setIsRevising(false)} className="flex-1 py-3 bg-slate-100 font-bold rounded-xl text-slate-500">Batal</button>
+                              <button onClick={handleSaveRevision} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">Simpan & Masuk</button>
+                          </div>
+                      </div>
+                  ) : (
+                      /* TAMPILAN MODE NORMAL */
+                      <div className="text-center">
+                          <h2 className="text-4xl font-black text-slate-800 mb-2 uppercase">{scannedDriver.licensePlate}</h2>
+                          <p className="text-lg font-bold text-slate-600">{scannedDriver.name}</p>
+                          <p className="text-sm text-slate-400 mb-8">{scannedDriver.company}</p>
+
+                          <div className="space-y-3">
+                              <button 
+                                  onClick={handleNormalApprove}
+                                  className="w-full py-4 bg-emerald-500 text-white font-bold rounded-2xl shadow-lg hover:bg-emerald-600 transition-all flex justify-center items-center gap-2"
+                              >
+                                  <CheckCircle className="w-5 h-5"/> IZINKAN MASUK (Sesuai)
+                              </button>
+                              
+                              <button 
+                                  onClick={async () => {
+                                      const reason = prompt("Alasan Tolak (Booking Ulang):");
+                                      if(reason) {
+                                          await rejectGate(scannedDriver.id, reason);
+                                          setView('DASHBOARD');
+                                          fetchData();
+                                      }
+                                  }}
+                                  className="w-full py-4 bg-white border-2 border-red-100 text-red-500 font-bold rounded-2xl hover:bg-red-50 transition-all flex justify-center items-center gap-2"
+                              >
+                                  <XCircle className="w-5 h-5"/> TOLAK (Booking Ulang)
+                              </button>
+                          </div>
+
+                          <div className="mt-8 pt-6 border-t border-slate-100">
+                              <button 
+                                  onClick={() => {
+                                      setReviseForm({
+                                          name: scannedDriver.name,
+                                          plate: scannedDriver.licensePlate,
+                                          company: scannedDriver.company
+                                      });
+                                      setIsRevising(true);
+                                  }}
+                                  className="text-slate-400 font-bold text-sm flex items-center justify-center gap-2 hover:text-blue-600 transition-colors"
+                              >
+                                  <Edit2 className="w-4 h-4"/>
+                                  Data Salah? Klik Revisi Disini
+                              </button>
+                          </div>
+                      </div>
+                  )}
               </div>
           </div>
       );
   }
 
-  // --- RENDER DASHBOARD ---
+  // --- RENDER DASHBOARD UTAMA (List Antrian & Checkout) ---
   return (
-      <div className="p-4 md:p-6 bg-slate-100 min-h-screen">
-          <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-            <div>
-                <h1 className="text-xl font-black text-slate-800">Security Ops</h1>
-                <p className="text-xs font-bold text-slate-400">Petugas: {currentUser?.name || 'Guest'}</p>
-            </div>
-            <div className="flex gap-2">
-                <button onClick={fetchData} className="p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200"><RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`}/></button>
-                {onBack && <button onClick={onBack} className="px-4 py-2 bg-red-50 text-red-500 rounded-lg font-bold text-sm hover:bg-red-100">Keluar</button>}
-            </div>
-          </div>
-          
-          <button onClick={() => setIsScanModalOpen(true)} className="w-full bg-blue-600 text-white p-8 rounded-3xl mb-6 flex flex-col items-center justify-center gap-3 shadow-xl shadow-blue-200 hover:scale-[1.01] transition-transform active:scale-95">
-              <Camera className="w-12 h-12"/> 
-              <span className="font-black text-xl tracking-wide">SCAN QR CODE</span>
-          </button>
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+       <div className="flex justify-between items-center bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+           <div>
+               <h1 className="text-2xl font-black text-slate-800">Security Gate</h1>
+               <p className="text-slate-500">Pos Penjagaan Masuk & Keluar</p>
+           </div>
+           
+           {/* Simulasi Input Scan */}
+           <div className="flex gap-2">
+               <input 
+                  type="text" 
+                  placeholder="Simulasi Scan QR (Booking Code)" 
+                  className="p-3 border rounded-xl"
+                  id="scanInput"
+               />
+               <button 
+                  onClick={() => {
+                      const val = (document.getElementById('scanInput') as HTMLInputElement).value;
+                      handleSimulateScan(val);
+                  }}
+                  className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl"
+               >
+                   SCAN
+               </button>
+           </div>
+       </div>
 
-          <div className="flex p-1.5 bg-white rounded-2xl shadow-sm border border-slate-200 mb-4">
-                <button onClick={() => setActiveTab('GATE_IN')} className={`flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'GATE_IN' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}><LogIn className="w-4 h-4" /> Kendaraan Masuk</button>
-                <button onClick={() => setActiveTab('GATE_OUT')} className={`flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'GATE_OUT' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}><LogOut className="w-4 h-4" /> Kendaraan Keluar</button>
-          </div>
-
-          <div className="space-y-3 pb-20">
-              {filteredList.length === 0 ? (
-                  <div className="text-center py-10 text-slate-400 font-bold">Tidak ada antrian saat ini.</div>
-              ) : (
-                  filteredList.map(d => (
-                      <div key={d.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center hover:shadow-md transition-shadow">
-                          <div>
-                              <div className="font-black text-lg text-slate-800">{d.licensePlate}</div>
-                              <div className="text-xs font-bold text-slate-400">{d.name} • {d.company}</div>
-                              <div className="text-[10px] font-bold text-blue-500 mt-1 bg-blue-50 px-2 py-0.5 rounded w-fit">{d.status}</div>
-                          </div>
-                          {activeTab === 'GATE_IN' ? (
-                            <button onClick={() => handleManualSelect(d)} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors">PROSES</button>
-                          ) : ( 
-                            <span className="bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-bold border border-green-100">SELESAI</span> 
-                          )}
-                      </div>
-                  ))
-              )}
-          </div>
-
-          {/* Scan Modal */}
-          {isScanModalOpen && (
-              <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50 p-4 backdrop-blur-sm">
-                  <div className="bg-white p-4 rounded-3xl w-full max-w-sm relative">
-                      <button onClick={() => setIsScanModalOpen(false)} className="absolute top-4 right-4 bg-slate-100 p-2 rounded-full hover:bg-slate-200"><X className="w-5 h-5"/></button>
-                      <h3 className="text-center font-black text-lg mb-6">Input Manual</h3>
-                      
-                      <div className="space-y-4">
-                          <input type="text" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-blue-500 uppercase" placeholder="Ketik Plat Nomor..." value={manualIdInput} onChange={(e) => setManualIdInput(e.target.value)} autoFocus />
-                          
-                          <div className="max-h-60 overflow-y-auto space-y-2">
-                              {(drivers || [])
-                                .filter(d => d.licensePlate.includes(manualIdInput.toUpperCase()))
-                                .slice(0, 5) 
-                                .map(d => (
-                                  <div key={d.id} onClick={() => handleManualSelect(d)} className="p-3 bg-slate-50 rounded-xl font-bold text-slate-700 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors border border-transparent hover:border-blue-200">
-                                      {d.licensePlate} <span className="text-xs font-normal text-slate-400 ml-2">({d.name})</span>
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
-                  </div>
-              </div>
-          )}
-      </div>
+       {/* List Kendaraan Keluar (Checkout) */}
+       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+           <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+               <LogOut className="w-5 h-5"/> Siap Keluar (Checkout)
+           </h3>
+           <div className="space-y-2">
+               {drivers.filter(d => d.status === QueueStatus.COMPLETED).map(d => (
+                   <div key={d.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                       <div>
+                           <div className="font-black text-slate-800">{d.licensePlate}</div>
+                           <div className="text-xs text-slate-500">{d.name}</div>
+                       </div>
+                       <button 
+                          onClick={async () => {
+                              if(confirm('Konfirmasi kendaraan keluar?')) {
+                                  await checkoutDriver(d.id);
+                                  fetchData();
+                              }
+                          }}
+                          className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-lg hover:bg-slate-900"
+                       >
+                           KELUAR
+                       </button>
+                   </div>
+               ))}
+               {drivers.filter(d => d.status === QueueStatus.COMPLETED).length === 0 && (
+                   <p className="text-sm text-slate-400 italic">Tidak ada kendaraan yang siap keluar.</p>
+               )}
+           </div>
+       </div>
+    </div>
   );
 };
 
