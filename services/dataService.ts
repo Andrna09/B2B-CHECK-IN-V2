@@ -1,23 +1,16 @@
 import { supabase } from './supabaseClient';
 import { DriverData, QueueStatus } from '../types';
 
-// HAPUS IMPORT INI: import { sendWhatsAppNotification } from '../api/whatsapp';
-
 // --- FUNGSI HELPER: WA CLIENT (PENGGANTI IMPORT) ---
 const sendWhatsAppNotification = async (target: string, message: string): Promise<boolean> => {
   try {
-    console.log('📤 Sending WA to:', target);
     // Panggil Endpoint Vercel /api/whatsapp
     const response = await fetch('/api/whatsapp', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target, message }),
     });
-
     const result = await response.json();
-    console.log('📥 WA Result:', result);
     return result.status;
   } catch (error) {
     console.error('❌ Failed to send WA:', error);
@@ -53,9 +46,6 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
 
 // 1. CREATE (Driver Daftar) -> Status PENDING_REVIEW
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
-  let documentUrl = '';
-  // Logic upload file disini (jika ada)
-
   const { data: insertedData, error } = await supabase
     .from('drivers')
     .insert([
@@ -79,9 +69,6 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
     throw error;
   }
 
-  // Notifikasi ke Admin (Opsional)
-  // await sendWhatsAppNotification('0812XXXXXX', `Pendaftaran Baru: ${data.licensePlate}`);
-
   return insertedData ? mapDatabaseToDriver(insertedData) : null;
 };
 
@@ -98,7 +85,6 @@ export const approveBooking = async (id: string): Promise<boolean> => {
     }).eq('id', id);
 
     if (!error) {
-        // Kirim WA ke Driver
         const { data } = await supabase.from('drivers').select('phone, name').eq('id', id).single();
         if (data?.phone) {
              const msg = `*KONFIRMASI BOOKING BERHASIL*\n\nHalo ${data.name},\nKode Booking: *${code}*\n\nSilakan tunjukkan pesan ini ke Security saat tiba di lokasi.`;
@@ -139,7 +125,6 @@ export const reviseAndCheckIn = async (id: string, revisedData: {name: string, p
     }).eq('id', id);
 
     if (!error) {
-        // WA Notif Masuk Antrian
         const { data } = await supabase.from('drivers').select('phone').eq('id', id).single();
         if (data?.phone) await sendWhatsAppNotification(data.phone, `CHECK-IN BERHASIL.\nNomor Antrian: *${queueNo}*.\nSilakan parkir dan tunggu panggilan.`);
     }
@@ -155,7 +140,7 @@ export const rejectGate = async (id: string, reason: string): Promise<boolean> =
     return !error;
 };
 
-// --- FUNGSI LAINNYA ---
+// --- FUNGSI STANDAR LAINNYA ---
 
 export const getDrivers = async (): Promise<DriverData[]> => {
   const { data, error } = await supabase
@@ -166,12 +151,23 @@ export const getDrivers = async (): Promise<DriverData[]> => {
   return data ? data.map(mapDatabaseToDriver) : [];
 };
 
+// [FIX] FUNGSI YANG HILANG (Penyebab Error)
+export const getDriverById = async (id: string): Promise<DriverData | null> => {
+  const { data, error } = await supabase
+    .from('drivers')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) return null;
+  return data ? mapDatabaseToDriver(data) : null;
+};
+
 export const updateDriverStatus = async (id: string, status: QueueStatus, gate?: string): Promise<void> => {
     const updates: any = { status };
     if (status === QueueStatus.CALLED && gate) {
         updates.gate = gate;
         updates.called_time = Date.now();
-        // Opsi: Kirim WA Panggilan disini jika mau
         const { data } = await supabase.from('drivers').select('phone').eq('id', id).single();
         if(data?.phone) await sendWhatsAppNotification(data.phone, `PANGGILAN DOCK: Silakan menuju *${gate}* sekarang.`);
     }
@@ -187,7 +183,6 @@ export const checkoutDriver = async (id: string): Promise<void> => {
         exit_time: Date.now()
     }).eq('id', id);
     
-    // Kirim WA Surat Jalan Keluar
     const { data } = await supabase.from('drivers').select('phone').eq('id', id).single();
     if(data?.phone) await sendWhatsAppNotification(data.phone, `EXIT PASS.\nTerima kasih, hati-hati di jalan.`);
 };
