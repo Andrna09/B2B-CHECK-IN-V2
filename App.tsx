@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Layout from './components/Layout'; // Pastikan import ini benar
+// Hapus import Layout karena tidak dipakai di level ini lagi
 import DriverCheckIn from './components/DriverCheckIn';
 import DriverStatus from './components/DriverStatus';
 import AdminDashboard from './components/AdminDashboard';
@@ -22,9 +22,9 @@ const App: React.FC = () => {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionRole, setTransitionRole] = useState<'ADMIN' | 'SECURITY' | 'MANAGER' | null>(null);
 
-  // Landing Page Component
+  // --- LANDING PAGE COMPONENT (Tetap Sama) ---
   const LandingPage = () => (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden px-6 lg:px-12 py-10">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden px-6 lg:px-12 py-10 bg-slate-50">
       <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-pink-200/20 rounded-full blur-[100px] animate-pulse"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-200/10 rounded-full blur-[120px]"></div>
       
@@ -56,7 +56,7 @@ const App: React.FC = () => {
         </div>
         <div className="hidden lg:block lg:col-span-7 relative h-[600px]">
           <div className="relative w-full h-full rounded-[3rem] overflow-hidden border-[6px] border-white shadow-2xl">
-             <img src="https://lh3.googleusercontent.com/gps-cs-s/AG0ilSyUnU3OugVJpRf26RWFVCuVaFLhm_b6RKgTqLCDJdQyybIi9U5jNGoFoF1jrRWtWJmggqd9VZm5kUwbTdKH1AG22qGrImduifg6Msj1iSgTXpqdBH0OSmX8BYhsdTZp9riWEPeDHw=s680-w680-h510-rw" alt="Sociolla Warehouse" className="w-full h-full object-cover"/>
+             <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=2070&auto=format&fit=crop" alt="Sociolla Warehouse" className="w-full h-full object-cover"/>
              <div className="absolute bottom-8 left-8 bg-white/90 backdrop-blur-xl p-5 rounded-3xl shadow-lg max-w-xs border border-white/50">
                <h3 className="font-serif font-bold text-slate-900 text-lg">PT Social Bella Indonesia</h3>
                <p className="text-[10px] font-bold text-pink-500 uppercase tracking-widest mt-0.5">Secure Integrated System</p>
@@ -94,12 +94,16 @@ const App: React.FC = () => {
       setView('home');
   };
 
+  // --- LOGIC RENDER CONTENT ---
   const renderContent = () => {
     switch (view) {
       case 'system-overview': return <SystemOverview onNavigate={setView} onBack={() => setView('home')} />;
       case 'checkin': return <DriverCheckIn onSuccess={handleCheckInSuccess} onBack={() => setView('home')} />;
       case 'status': return currentDriverId ? <DriverStatus driverId={currentDriverId} onBack={() => setView('home')} /> : <LandingPage />;
-      case 'admin-dashboard': return <AdminDashboard onBack={handleLogout} />;
+      
+      // Dashboard ini sudah punya <Layout> sendiri di dalamnya, jadi tidak perlu dibungkus lagi
+      case 'admin-dashboard': return <AdminDashboard />; 
+      
       case 'admin-reports': return <AdminReports />;
       case 'security-dashboard': return <SecurityDashboard onBack={handleLogout} currentUser={currentUser} />;
       case 'public-monitor': return <PublicMonitor onBack={() => setView('home')} />;
@@ -113,7 +117,8 @@ const App: React.FC = () => {
         {isTransitioning && (
           <div className="fixed inset-0 z-[100] bg-[#FDF2F4] flex flex-col items-center justify-center font-sans">
               <div className="mb-6 animate-bounce w-24 h-24 bg-white rounded-3xl shadow-xl overflow-hidden border-4 border-white">
-                  <img src="https://play-lh.googleusercontent.com/J0NYr2cNJmhQiGbDXJHOqa4o9WhPeqC4BGuaD-YKp28KxH1xoW83A3dJyQMsaNwpx0Pv" alt="Sociolla" className="w-full h-full object-cover"/>
+                  {/* Gunakan placeholder image atau asset lokal */}
+                  <div className="w-full h-full bg-pink-500 flex items-center justify-center text-white font-bold text-xl">SB</div>
               </div>
               <h1 className="text-4xl font-serif font-bold text-pink-600 mb-3 tracking-tight">Sociolla</h1>
               <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] animate-pulse">Loading System...</p>
@@ -126,16 +131,14 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {(view === 'home') && <LandingPage />}
-
-        {view !== 'home' && view !== 'login' && (
-             ['public-monitor', 'system-manager', 'security-dashboard', 'system-overview'].includes(view) ? (
-               renderContent()
-             ) : (
-               <Layout currentView={view} onViewChange={setView} isAdmin={view.startsWith('admin')}>
-                   {renderContent()}
-               </Layout>
-             )
+        {view === 'home' ? (
+            <LandingPage />
+        ) : (
+            // PERBAIKAN: Hapus <Layout> di sini karena sudah ada di dalam AdminDashboard
+            // Cukup gunakan div container biasa
+            <div className="min-h-screen bg-slate-50 w-full">
+                {renderContent()}
+            </div>
         )}
     </>
   );
