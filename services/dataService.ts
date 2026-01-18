@@ -42,7 +42,7 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
   completedTime: dbData.end_time,
   exitTime: dbData.exit_time,
   
-  // Booking Data (NEW)
+  // Booking Data (BARU)
   bookingCode: dbData.booking_code,
   poNumber: dbData.po_number,
   visitDate: dbData.visit_date,
@@ -193,7 +193,7 @@ export const checkoutDriver = async (id: string): Promise<void> => {
 };
 
 // ============================================================================
-// 2. AUTHENTICATION FUNCTIONS (SUDAH FIX)
+// 2. AUTHENTICATION FUNCTIONS (INI PERBAIKAN LOGIN)
 // ============================================================================
 
 export const verifyDivisionCredential = async (divId: string, password: string): Promise<DivisionConfig | null> => {
@@ -227,7 +227,7 @@ export const loginSystem = async (userId: string, pin: string): Promise<UserProf
         .from('regular_drivers')
         .select('*')
         .eq('id', userId)
-        // .eq('pin_code', pin) // Uncomment jika ingin validasi PIN ketat
+        // .eq('pin_code', pin) // Pin check sementara di-disable untuk kemudahan testing
         .single();
 
     if (data) {
