@@ -1,5 +1,3 @@
-// types.ts
-
 export interface DriverData {
   id: string;
   name: string;
@@ -18,7 +16,7 @@ export interface DriverData {
   completedTime?: number;
   exitTime?: number;
   
-  // Data Booking (NEW - Sesuai SQL Final)
+  // Data Booking (BARU - Sesuai SQL Anda)
   bookingCode?: string;
   poNumber?: string;
   visitDate?: string; // Format YYYY-MM-DD
