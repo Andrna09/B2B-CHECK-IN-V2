@@ -8,8 +8,7 @@ import { DriverData, QueueStatus } from '../types';
 import TicketPass from './TicketPass';
 
 // --- CONFIGURATION ---
-// (Dihapus: Static ALLOWED_SLOTS)
-// (Diganti: Dynamic Logic di dalam component)
+// Note: Jadwal diatur via logic di dalam komponen
 
 const DriverCheckIn: React.FC = () => {
   // --- STATE MANAGEMENT ---
@@ -220,8 +219,9 @@ const DriverCheckIn: React.FC = () => {
               <span className="text-[10px] font-bold mt-2 text-slate-500 uppercase tracking-wide">
                 {s === 1 ? 'Jadwal' : s === 2 ? 'Identitas' : 'Muatan'}
               </span>
+              {/* REVISI DI SINI: Ganti width dinamis menjadi static (w-24 sm:w-32) */}
               {s !== 3 && (
-                <div className={`absolute left-10 top-5 w-[calc(100vw/3-40px)] h-0.5 -z-10 ${
+                <div className={`absolute left-10 top-5 w-24 sm:w-32 h-0.5 -z-10 ${
                   step > s ? 'bg-blue-600' : 'bg-slate-200'
                 }`} />
               )}
@@ -246,7 +246,7 @@ const DriverCheckIn: React.FC = () => {
                   value={formData.visitDate}
                   min={new Date().toISOString().split('T')[0]}
                   onChange={e => {
-                      setFormData({...formData, visitDate: e.target.value, slotTime: ''}); // Reset slot jika ganti tanggal
+                      setFormData({...formData, visitDate: e.target.value, slotTime: ''}); 
                   }}
                 />
               </div>
@@ -255,7 +255,7 @@ const DriverCheckIn: React.FC = () => {
             <div>
               <label className="text-sm font-bold text-slate-500 mb-2 block">Pilih Jam (Estimasi)</label>
               
-              {/* REVISI LOGIC JADWAL */}
+              {/* LOGIC JADWAL */}
               {isWeekend(formData.visitDate) ? (
                   <div className="p-4 bg-red-50 rounded-xl border border-red-100 text-center">
                       <p className="text-red-500 font-bold text-sm">Hari libur, silakan pilih tanggal lain.</p>
