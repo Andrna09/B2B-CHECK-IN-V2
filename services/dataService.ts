@@ -1,8 +1,31 @@
 import { supabase } from './supabaseClient';
 import { DriverData, QueueStatus } from '../types';
-import { sendWhatsAppNotification } from '../api/whatsapp';
 
-// Helper: Mapping DB ke App
+// HAPUS IMPORT INI: import { sendWhatsAppNotification } from '../api/whatsapp';
+
+// --- FUNGSI HELPER: WA CLIENT (PENGGANTI IMPORT) ---
+const sendWhatsAppNotification = async (target: string, message: string): Promise<boolean> => {
+  try {
+    console.log('📤 Sending WA to:', target);
+    // Panggil Endpoint Vercel /api/whatsapp
+    const response = await fetch('/api/whatsapp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ target, message }),
+    });
+
+    const result = await response.json();
+    console.log('📥 WA Result:', result);
+    return result.status;
+  } catch (error) {
+    console.error('❌ Failed to send WA:', error);
+    return false;
+  }
+};
+
+// --- Helper: Mapping DB ke App ---
 const mapDatabaseToDriver = (dbData: any): DriverData => ({
   id: dbData.id,
   name: dbData.name,
@@ -30,9 +53,8 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
 
 // 1. CREATE (Driver Daftar) -> Status PENDING_REVIEW
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
-  // Logic Upload (Simpel)
   let documentUrl = '';
-  // (Asumsi logic upload file ada disini atau dipassing string url-nya)
+  // Logic upload file disini (jika ada)
 
   const { data: insertedData, error } = await supabase
     .from('drivers')
@@ -43,8 +65,7 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
         company: data.company,
         phone: data.phone,
         purpose: data.purpose,
-        // [PENTING] Status awal PENDING, bukan BOOKED
-        status: QueueStatus.PENDING_REVIEW, 
+        status: QueueStatus.PENDING_REVIEW, // Status Awal
         entry_type: 'BOOKING',
         check_in_time: Date.now(),
         document_file: docFile || ''
@@ -58,15 +79,14 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
     throw error;
   }
 
-  // Notif ke Admin (Opsional)
-  // sendWhatsAppNotification('ADMIN_NOMOR', `Pendaftaran Baru: ${data.licensePlate}`);
+  // Notifikasi ke Admin (Opsional)
+  // await sendWhatsAppNotification('0812XXXXXX', `Pendaftaran Baru: ${data.licensePlate}`);
 
   return insertedData ? mapDatabaseToDriver(insertedData) : null;
 };
 
 // 2. ADMIN APPROVE (Tahap 1) -> Status BOOKED + Generate Code
 export const approveBooking = async (id: string): Promise<boolean> => {
-    // Generate Code: SOC-IN-DATE-RANDOM
     const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
     const random = Math.floor(1000 + Math.random() * 9000);
     const code = `SOC-IN-${dateStr}-${random}`;
@@ -78,7 +98,7 @@ export const approveBooking = async (id: string): Promise<boolean> => {
     }).eq('id', id);
 
     if (!error) {
-        // Kirim WA Tiket
+        // Kirim WA ke Driver
         const { data } = await supabase.from('drivers').select('phone, name').eq('id', id).single();
         if (data?.phone) {
              const msg = `*KONFIRMASI BOOKING BERHASIL*\n\nHalo ${data.name},\nKode Booking: *${code}*\n\nSilakan tunjukkan pesan ini ke Security saat tiba di lokasi.`;
@@ -106,7 +126,6 @@ export const rejectBooking = async (id: string, reason: string): Promise<boolean
 
 // 4. SECURITY CHECK-IN / REVISI (Tahap 2) -> Status CHECKED_IN
 export const reviseAndCheckIn = async (id: string, revisedData: {name: string, plate: string, company: string}): Promise<boolean> => {
-    // Generate Antrian SOC-XXX
     const queueNo = `SOC-${Math.floor(100 + Math.random() * 900)}`; 
 
     const { error } = await supabase.from('drivers').update({
@@ -122,7 +141,7 @@ export const reviseAndCheckIn = async (id: string, revisedData: {name: string, p
     if (!error) {
         // WA Notif Masuk Antrian
         const { data } = await supabase.from('drivers').select('phone').eq('id', id).single();
-        if (data?.phone) sendWhatsAppNotification(data.phone, `CHECK-IN BERHASIL.\nNomor Antrian: *${queueNo}*.\nSilakan parkir dan tunggu panggilan.`);
+        if (data?.phone) await sendWhatsAppNotification(data.phone, `CHECK-IN BERHASIL.\nNomor Antrian: *${queueNo}*.\nSilakan parkir dan tunggu panggilan.`);
     }
     return !error;
 };
@@ -136,7 +155,7 @@ export const rejectGate = async (id: string, reason: string): Promise<boolean> =
     return !error;
 };
 
-// --- FUNGSI STANDAR LAINNYA ---
+// --- FUNGSI LAINNYA ---
 
 export const getDrivers = async (): Promise<DriverData[]> => {
   const { data, error } = await supabase
@@ -152,7 +171,9 @@ export const updateDriverStatus = async (id: string, status: QueueStatus, gate?:
     if (status === QueueStatus.CALLED && gate) {
         updates.gate = gate;
         updates.called_time = Date.now();
-        // Trigger WA Panggilan disini
+        // Opsi: Kirim WA Panggilan disini jika mau
+        const { data } = await supabase.from('drivers').select('phone').eq('id', id).single();
+        if(data?.phone) await sendWhatsAppNotification(data.phone, `PANGGILAN DOCK: Silakan menuju *${gate}* sekarang.`);
     }
     if (status === QueueStatus.LOADING) updates.loading_start_time = Date.now();
     if (status === QueueStatus.COMPLETED) updates.end_time = Date.now();
@@ -165,4 +186,8 @@ export const checkoutDriver = async (id: string): Promise<void> => {
         status: QueueStatus.EXITED,
         exit_time: Date.now()
     }).eq('id', id);
+    
+    // Kirim WA Surat Jalan Keluar
+    const { data } = await supabase.from('drivers').select('phone').eq('id', id).single();
+    if(data?.phone) await sendWhatsAppNotification(data.phone, `EXIT PASS.\nTerima kasih, hati-hati di jalan.`);
 };
