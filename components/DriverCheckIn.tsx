@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Clock, User, Truck, 
-  ChevronRight, ChevronLeft, CheckCircle 
+  ChevronRight, ChevronLeft, CheckCircle, Home 
 } from 'lucide-react';
 import { createCheckIn } from '../services/dataService';
 import { DriverData, QueueStatus } from '../types';
@@ -179,7 +179,7 @@ const DriverCheckIn: React.FC = () => {
     }
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-[2rem] shadow-xl text-center">
+        <div className="max-w-md w-full bg-white p-8 rounded-[2rem] shadow-xl text-center animate-fade-in-up">
           <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6">
              <Clock className="w-10 h-10 text-amber-500 animate-pulse"/>
           </div>
@@ -187,9 +187,20 @@ const DriverCheckIn: React.FC = () => {
           <p className="text-slate-600 mb-6">
             Data Anda telah diterima. Tunggu konfirmasi admin via WhatsApp untuk mendapatkan Tiket QR Code.
           </p>
-          <button onClick={() => window.location.reload()} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl">
+          
+          <button onClick={() => window.location.reload()} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:scale-[1.02] transition-transform">
             Buat Booking Baru
           </button>
+
+          {/* ADDED: Tombol Navigasi Kecil */}
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-6 text-slate-400 font-bold text-sm hover:text-slate-600 flex items-center justify-center gap-2 mx-auto transition-colors"
+          >
+            <Home className="w-4 h-4" />
+            Kembali ke Halaman Awal
+          </button>
+
         </div>
       </div>
     );
@@ -219,7 +230,6 @@ const DriverCheckIn: React.FC = () => {
               <span className="text-[10px] font-bold mt-2 text-slate-500 uppercase tracking-wide">
                 {s === 1 ? 'Jadwal' : s === 2 ? 'Identitas' : 'Muatan'}
               </span>
-              {/* REVISI DI SINI: Ganti width dinamis menjadi static (w-24 sm:w-32) */}
               {s !== 3 && (
                 <div className={`absolute left-10 top-5 w-24 sm:w-32 h-0.5 -z-10 ${
                   step > s ? 'bg-blue-600' : 'bg-slate-200'
