@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Layout from './components/Layout'; // Pastikan import ini benar
+import Layout from './components/Layout'; 
 import DriverCheckIn from './components/DriverCheckIn';
 import DriverStatus from './components/DriverStatus';
 import AdminDashboard from './components/AdminDashboard';
@@ -22,9 +22,9 @@ const App: React.FC = () => {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionRole, setTransitionRole] = useState<'ADMIN' | 'SECURITY' | 'MANAGER' | null>(null);
 
-  // Landing Page Component
+  // Landing Page Component (Halaman Depan)
   const LandingPage = () => (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden px-6 lg:px-12 py-10">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden px-6 lg:px-12 py-10 bg-slate-50">
       <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-pink-200/20 rounded-full blur-[100px] animate-pulse"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-200/10 rounded-full blur-[120px]"></div>
       
@@ -56,7 +56,7 @@ const App: React.FC = () => {
         </div>
         <div className="hidden lg:block lg:col-span-7 relative h-[600px]">
           <div className="relative w-full h-full rounded-[3rem] overflow-hidden border-[6px] border-white shadow-2xl">
-             <img src="https://lh3.googleusercontent.com/gps-cs-s/AG0ilSyUnU3OugVJpRf26RWFVCuVaFLhm_b6RKgTqLCDJdQyybIi9U5jNGoFoF1jrRWtWJmggqd9VZm5kUwbTdKH1AG22qGrImduifg6Msj1iSgTXpqdBH0OSmX8BYhsdTZp9riWEPeDHw=s680-w680-h510-rw" alt="Sociolla Warehouse" className="w-full h-full object-cover"/>
+             <img src="https://lh3.googleusercontent.com/d/1X159-uP2Mi1H0k7OX-W7sujHkCqOa33j" alt="Sociolla Warehouse" className="w-full h-full object-cover"/>
              <div className="absolute bottom-8 left-8 bg-white/90 backdrop-blur-xl p-5 rounded-3xl shadow-lg max-w-xs border border-white/50">
                <h3 className="font-serif font-bold text-slate-900 text-lg">PT Social Bella Indonesia</h3>
                <p className="text-[10px] font-bold text-pink-500 uppercase tracking-widest mt-0.5">Secure Integrated System</p>
@@ -76,6 +76,8 @@ const App: React.FC = () => {
       setCurrentUser(user);
       setTransitionRole(user.role);
       setIsTransitioning(true);
+      
+      // Simulasi delay transisi agar terlihat smooth
       setTimeout(() => {
           if (user.role === 'ADMIN') setView('admin-dashboard');
           else if (user.role === 'SECURITY') setView('security-dashboard');
@@ -99,42 +101,61 @@ const App: React.FC = () => {
       case 'system-overview': return <SystemOverview onNavigate={setView} onBack={() => setView('home')} />;
       case 'checkin': return <DriverCheckIn onSuccess={handleCheckInSuccess} onBack={() => setView('home')} />;
       case 'status': return currentDriverId ? <DriverStatus driverId={currentDriverId} onBack={() => setView('home')} /> : <LandingPage />;
+      
+      // Halaman Admin (Akan dibungkus Layout di bawah)
       case 'admin-dashboard': return <AdminDashboard onBack={handleLogout} />;
       case 'admin-reports': return <AdminReports />;
+      
+      // Halaman Staff Lain (Full Screen)
       case 'security-dashboard': return <SecurityDashboard onBack={handleLogout} currentUser={currentUser} />;
       case 'public-monitor': return <PublicMonitor onBack={() => setView('home')} />;
       case 'system-manager': return <SystemManagerDashboard onBack={handleLogout} />;
+      
       default: return null;
     }
   };
 
   return (
     <>
+        {/* Loading Screen saat Login */}
         {isTransitioning && (
           <div className="fixed inset-0 z-[100] bg-[#FDF2F4] flex flex-col items-center justify-center font-sans">
               <div className="mb-6 animate-bounce w-24 h-24 bg-white rounded-3xl shadow-xl overflow-hidden border-4 border-white">
-                  <img src="https://play-lh.googleusercontent.com/J0NYr2cNJmhQiGbDXJHOqa4o9WhPeqC4BGuaD-YKp28KxH1xoW83A3dJyQMsaNwpx0Pv" alt="Sociolla" className="w-full h-full object-cover"/>
+                  <img src="https://lh3.googleusercontent.com/d/1X159-uP2Mi1H0k7OX-W7sujHkCqOa33j" alt="Sociolla" className="w-full h-full object-cover"/>
               </div>
               <h1 className="text-4xl font-serif font-bold text-pink-600 mb-3 tracking-tight">Sociolla</h1>
               <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] animate-pulse">Loading System...</p>
           </div>
         )}
 
+        {/* Modal Login (Popup) */}
         {view === 'login' && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-white">
              <LoginPage onLoginSuccess={handleLoginSuccess} onBack={() => setView('home')} />
           </div>
         )}
 
-        {(view === 'home') && <LandingPage />}
+        {/* Landing Page (Home) */}
+        {view === 'home' && <LandingPage />}
 
+        {/* LOGIKA TAMPILAN UTAMA (REVISI) */}
         {view !== 'home' && view !== 'login' && (
-             ['public-monitor', 'system-manager', 'security-dashboard', 'system-overview'].includes(view) ? (
-               renderContent()
-             ) : (
-               <Layout currentView={view} onViewChange={setView} isAdmin={view.startsWith('admin')}>
+             // Cek: Apakah ini halaman Admin? (dashboard, reports, settings)
+             ['admin-dashboard', 'admin-reports', 'settings'].includes(view) ? (
+               // JIKA YA: Tampilkan Sidebar (Layout)
+               <Layout 
+                  currentView={view} 
+                  onViewChange={setView} 
+                  isAdmin={true}
+                  userRole={currentUser?.role || 'ADMIN'}
+               >
                    {renderContent()}
                </Layout>
+             ) : (
+               // JIKA TIDAK (Check-In, Status, Security, dll): Tampilkan Full Screen
+               <div className="min-h-screen bg-slate-50">
+                  {renderContent()}
+               </div>
              )
         )}
     </>
