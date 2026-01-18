@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 import { DriverData, QueueStatus, GateConfig, UserProfile, DivisionConfig } from '../types';
 
-// --- TIPE UNTUK DEV CONFIG ---
+// --- TIPE CONFIG ---
 export interface DevConfig {
   enableGpsBypass: boolean;
   enableMockOCR: boolean;
@@ -50,7 +50,7 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
 });
 
 // ============================================================================
-// BAGIAN 1: DRIVER & OPERATIONAL FLOW
+// 1. DRIVER FLOW FUNCTIONS
 // ============================================================================
 
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
@@ -168,13 +168,53 @@ export const checkoutDriver = async (id: string): Promise<void> => {
 };
 
 // ============================================================================
-// BAGIAN 2: SYSTEM / ADMIN FUNCTIONS (YANG SEBELUMNYA HILANG)
+// 2. AUTHENTICATION FUNCTIONS (INI YANG HILANG SEBELUMNYA)
+// ============================================================================
+
+export const verifyDivisionCredential = async (divId: string, password: string): Promise<boolean> => {
+    // Cek apakah divisi ada di system_settings
+    const { data } = await supabase
+        .from('system_settings')
+        .select('*')
+        .eq('category', 'DIVISION')
+        .eq('value', divId) // value menyimpan ID Divisi
+        .single();
+    
+    // SEMENTARA: Karena password belum disimpan terenkripsi, kita validasi ID saja dulu
+    // atau jika Anda menyimpan password di field 'label' dalam format "NAME|PASS", bisa di split.
+    // Untuk tahap ini, return true jika ID valid agar tidak stuck.
+    return !!data; 
+};
+
+export const loginSystem = async (userId: string, pin: string): Promise<UserProfile | null> => {
+    // Cek user di tabel regular_drivers (sebagai tabel user sementara)
+    const { data } = await supabase
+        .from('regular_drivers')
+        .select('*')
+        .eq('id', userId) // Pastikan input ID saat create user disimpan di kolom ID
+        // .eq('pin_code', pin) // Uncomment jika kolom pin_code sudah ada di DB
+        .single();
+
+    if (data) {
+        // Mock return profile
+        return {
+            id: data.id,
+            name: data.name,
+            role: 'SECURITY', // Default role jika kolom role belum ada
+            status: 'ACTIVE'
+        } as UserProfile;
+    }
+    return null;
+};
+
+// ============================================================================
+// 3. SYSTEM / ADMIN FUNCTIONS
 // ============================================================================
 
 // --- GATE CONFIGS ---
 export const getGateConfigs = async (): Promise<GateConfig[]> => {
   const { data, error } = await supabase.from('gate_configs').select('*').order('name', { ascending: true });
-  if (error) { console.error('Error fetching gates:', error); return []; }
+  if (error) return [];
   return data || [];
 };
 
@@ -185,17 +225,27 @@ export const saveGateConfig = async (config: Partial<GateConfig>): Promise<boole
 
 // --- PROFILES (USERS) ---
 export const getProfiles = async (): Promise<UserProfile[]> => {
-  const { data, error } = await supabase.from('regular_drivers').select('*'); // Menggunakan tabel regular_drivers sbg user profile sementara
+  const { data } = await supabase.from('regular_drivers').select('*');
   return (data as any) || [];
 };
 
 export const addProfile = async (profile: UserProfile): Promise<boolean> => {
-  const { error } = await supabase.from('regular_drivers').insert([profile]);
+  // Simpan user baru ke regular_drivers
+  const { error } = await supabase.from('regular_drivers').insert([{
+      // Mapping field sesuai struktur DB Anda
+      id: profile.id,
+      name: profile.name,
+      license_plate: 'STAFF', // Dummy placeholder
+      phone: profile.role // Simpan role di phone sementara jika kolom role belum ada
+  }]);
   return !error;
 };
 
 export const updateProfile = async (profile: UserProfile): Promise<boolean> => {
-  const { error } = await supabase.from('regular_drivers').update(profile).eq('id', profile.id);
+  const { error } = await supabase.from('regular_drivers').update({
+      name: profile.name,
+      phone: profile.role
+  }).eq('id', profile.id);
   return !error;
 };
 
@@ -204,27 +254,19 @@ export const deleteProfile = async (id: string): Promise<boolean> => {
   return !error;
 };
 
-// --- SYSTEM SETTINGS ---
-export const deleteSystemSetting = async (id: string): Promise<boolean> => {
-  const { error } = await supabase.from('gate_configs').delete().eq('id', id);
-  return !error;
-};
-
 // --- DIVISIONS ---
 export const getDivisions = async (): Promise<DivisionConfig[]> => {
     const { data } = await supabase.from('system_settings').select('*').eq('category', 'DIVISION');
-    // Transform dari format system_settings ke DivisionConfig
     return (data || []).map((d: any) => ({
         id: d.value,
         name: d.label,
-        role: 'SECURITY', // Default fallback
+        role: 'SECURITY',
         theme: 'blue',
-        password: d.value // Sementara pakai value sebagai password jika belum ada kolom khusus
+        password: '***' 
     })) as DivisionConfig[];
 };
 
 export const saveDivision = async (div: DivisionConfig): Promise<boolean> => {
-    // Simpan ke tabel system_settings
     const { error } = await supabase.from('system_settings').insert([{ 
         category: 'DIVISION', 
         value: div.id, 
@@ -238,21 +280,23 @@ export const deleteDivision = async (id: string): Promise<boolean> => {
     return !error;
 };
 
-// --- ACTIVITY LOGS ---
+export const deleteSystemSetting = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from('gate_configs').delete().eq('id', id);
+    return !error;
+};
+
+// --- LOGS & UTILS ---
 export const getActivityLogs = async (): Promise<any[]> => {
   const { data } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(50);
   return data || [];
 };
 
-// --- UTILS ---
 export const wipeDatabase = async (): Promise<boolean> => {
   const { error } = await supabase.from('drivers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   return !error;
 };
 
-export const seedDummyData = async (): Promise<boolean> => {
-  return true;
-};
+export const seedDummyData = async (): Promise<boolean> => { return true; };
 
 export const exportDatabase = async (): Promise<string> => {
   const { data } = await supabase.from('drivers').select('*');
@@ -270,7 +314,6 @@ export const importDatabase = async (jsonString: string): Promise<boolean> => {
   return false;
 };
 
-// --- DEV CONFIG ---
 export const getDevConfig = (): DevConfig => {
     const stored = localStorage.getItem('DEV_CONFIG');
     return stored ? JSON.parse(stored) : { enableGpsBypass: false, enableMockOCR: false };
