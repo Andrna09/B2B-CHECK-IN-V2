@@ -48,14 +48,40 @@ export enum QueueStatus {
   NO_SHOW = 'NO_SHOW'
 }
 
-// [FIX FINAL] Definisi Gate yang lengkap dan bersih
-export interface Gate {
+export interface GateConfig {
   id: string;
   name: string;
-  status: 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE';
-  type?: 'DOCK' | 'GENERAL';
+  capacity: number;
+  status: 'OPEN' | 'MAINTENANCE' | 'CLOSED';
+  type: 'GENERAL' | 'DOCK';
   currentDriverId?: string;
 }
 
-// Alias agar kompatibel dengan kode lama yang pakai GateConfig
-export type GateConfig = Gate;
+// Alias agar kompatibel
+export type Gate = GateConfig;
+
+// [BARU] Definisi Tambahan untuk CommandCenter
+export interface UserProfile {
+  id: string;
+  name: string;
+  role: 'ADMIN' | 'SECURITY' | 'MANAGER';
+  email?: string;
+  pin_code?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface ActivityLog {
+  id: string;
+  created_at: string;
+  user_email: string;
+  action: string;
+  details: string;
+}
+
+export interface DivisionConfig {
+  id: string;
+  name: string;
+  role: 'ADMIN' | 'SECURITY' | 'MANAGER';
+  theme: 'emerald' | 'blue' | 'purple' | 'orange';
+  password?: string;
+}
