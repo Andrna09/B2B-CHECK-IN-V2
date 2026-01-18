@@ -1,3 +1,5 @@
+// types.ts
+
 export interface DriverData {
   id: string;
   name: string;
@@ -16,10 +18,15 @@ export interface DriverData {
   completedTime?: number;
   exitTime?: number;
   
-  // Data Pendukung
+  // Data Booking (NEW - Sesuai SQL Final)
+  bookingCode?: string;
+  poNumber?: string;
+  visitDate?: string; // Format YYYY-MM-DD
+  slotTime?: string;  // Format HH:MM
+  
+  // Posisi
   gate?: string;
   queueNumber?: string;
-  bookingCode?: string;
   
   // Dokumen & Bukti
   documentUrl?: string;
@@ -27,7 +34,7 @@ export interface DriverData {
   photoBeforeUrl?: string[];
   photoAfterUrl?: string[];
   
-  // Kolom Alur Baru
+  // Catatan Admin/Security
   rejectionReason?: string;
   adminNotes?: string;
   securityNotes?: string;
@@ -57,10 +64,8 @@ export interface GateConfig {
   currentDriverId?: string;
 }
 
-// Alias agar kompatibel
 export type Gate = GateConfig;
 
-// [BARU] Definisi Tambahan untuk CommandCenter
 export interface UserProfile {
   id: string;
   name: string;
