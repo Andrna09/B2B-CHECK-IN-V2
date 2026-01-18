@@ -1,170 +1,190 @@
-import React, { useEffect, useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
-import { Clock, MapPin, RefreshCw, Truck, FileText, CheckCircle, ArrowLeft, Loader2, Megaphone, AlertCircle } from 'lucide-react';
-// [FIX] Gunakan GateConfig as Gate untuk menghindari error import
-import { DriverData, QueueStatus, GateConfig as Gate } from '../types';
-import { getDriverById } from '../services/dataService';
+import React, { useState } from 'react';
+import { Camera, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { createCheckIn } from '../services/dataService';
+import { QueueStatus, DriverData } from '../types';
+import TicketPass from './TicketPass'; 
 
-interface Props {
-  driverId: string;
-  onBack: () => void;
-}
+const DriverCheckIn: React.FC = () => {
+  const [viewMode, setViewMode] = useState<'START' | 'FORM' | 'RESULT'>('START');
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    licensePlate: '',
+    company: '',
+    purpose: 'LOADING' as 'LOADING' | 'UNLOADING',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successData, setSuccessData] = useState<DriverData | null>(null);
 
-const DriverStatus: React.FC<Props> = ({ driverId, onBack }) => {
-  const [driver, setDriver] = useState<DriverData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-
-  const fetchStatus = async () => {
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.licensePlate) return alert('Lengkapi Data!');
+    setIsSubmitting(true);
     try {
-      setLoading(true);
-      const data = await getDriverById(driverId);
-      if (data) setDriver(data);
-    } catch (error) {
-      console.error("Gagal mengambil data driver", error);
+      // Create CheckIn -> Returns PENDING status
+      const result = await createCheckIn(formData);
+      if (result) {
+        setSuccessData(result);
+        setViewMode('RESULT');
+      }
+    } catch (e) {
+      alert('Gagal mengirim data');
     } finally {
-      setLoading(false);
-      setLastUpdate(new Date());
+      setIsSubmitting(false);
     }
   };
 
-  useEffect(() => {
-    fetchStatus();
-    // Auto refresh setiap 30 detik
-    const interval = setInterval(fetchStatus, 30000);
-    return () => clearInterval(interval);
-  }, [driverId]);
-
-  if (loading && !driver) {
+  // 1. HALAMAN DEPAN
+  if (viewMode === 'START') {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
-        <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
-        <p className="text-slate-500 font-medium">Memuat Status...</p>
-      </div>
-    );
-  }
-
-  if (!driver) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 text-center">
-        <AlertCircle className="w-16 h-16 text-red-400 mb-4" />
-        <h2 className="text-xl font-bold text-slate-800">Data Tidak Ditemukan</h2>
-        <p className="text-slate-500 mb-6">Mohon cek kembali kode booking atau hubungi petugas.</p>
-        <button onClick={onBack} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-bold">Kembali</button>
-      </div>
-    );
-  }
-
-  // Helper untuk warna status
-  const getStatusColor = (status: QueueStatus) => {
-    switch (status) {
-      case QueueStatus.PENDING_REVIEW: return 'bg-amber-100 text-amber-700 border-amber-200';
-      case QueueStatus.BOOKED: return 'bg-blue-100 text-blue-700 border-blue-200';
-      case QueueStatus.CHECKED_IN: return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      case QueueStatus.CALLED: return 'bg-orange-100 text-orange-700 border-orange-200'; // Flashy
-      case QueueStatus.LOADING: return 'bg-purple-100 text-purple-700 border-purple-200';
-      case QueueStatus.COMPLETED: return 'bg-green-100 text-green-700 border-green-200';
-      case QueueStatus.REJECTED: 
-      case QueueStatus.REJECTED_NEED_REBOOK: return 'bg-red-100 text-red-700 border-red-200';
-      default: return 'bg-slate-100 text-slate-600 border-slate-200';
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 pb-10">
-      {/* Header Mobile */}
-      <div className="bg-white px-4 py-4 shadow-sm border-b border-slate-100 sticky top-0 z-10 flex items-center justify-between">
-        <button onClick={onBack} className="p-2 -ml-2 text-slate-400 hover:text-slate-800 rounded-full hover:bg-slate-50">
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <h1 className="font-bold text-slate-800 text-lg">Status Pengiriman</h1>
-        <button onClick={fetchStatus} className="p-2 -mr-2 text-blue-600 hover:bg-blue-50 rounded-full">
-          <RefreshCw className="w-5 h-5" />
-        </button>
-      </div>
-
-      <div className="max-w-md mx-auto p-4 space-y-4">
-        
-        {/* KARTU STATUS UTAMA */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 text-center relative overflow-hidden">
-           <div className={`inline-block px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-4 border ${getStatusColor(driver.status)}`}>
-              {driver.status.replace(/_/g, ' ')}
-           </div>
-
-           {/* Logic Tampilan Berdasarkan Status */}
-           {driver.status === QueueStatus.PENDING_REVIEW ? (
-              <div className="py-4">
-                 <Clock className="w-16 h-16 text-amber-500 mx-auto mb-4 animate-pulse" />
-                 <h2 className="text-2xl font-black text-slate-800">Menunggu Verifikasi</h2>
-                 <p className="text-slate-500 text-sm mt-2">Data Anda sedang ditinjau Admin.</p>
-              </div>
-           ) : driver.status === QueueStatus.BOOKED ? (
-              <div className="py-4">
-                 <div className="bg-white p-4 rounded-2xl shadow-inner border border-slate-100 inline-block mb-4">
-                    <QRCodeSVG value={driver.bookingCode || 'N/A'} size={140} />
-                 </div>
-                 <p className="font-mono font-bold text-lg text-slate-800 tracking-widest">{driver.bookingCode}</p>
-                 <p className="text-xs text-slate-400 mt-1">Tunjukkan QR ini ke Security</p>
-              </div>
-           ) : driver.status === QueueStatus.CALLED ? (
-              <div className="py-4 animate-pulse">
-                 <Megaphone className="w-16 h-16 text-orange-500 mx-auto mb-4" />
-                 <h2 className="text-3xl font-black text-orange-600 uppercase">PANGGILAN!</h2>
-                 <p className="text-lg font-bold text-slate-800 mt-2">Segera Menuju {driver.gate || 'Loading Dock'}</p>
-              </div>
-           ) : (
-              // Default View
-              <div className="py-2">
-                 <h2 className="text-3xl font-black text-slate-800">{driver.licensePlate}</h2>
-                 <p className="text-slate-500">{driver.company}</p>
-              </div>
-           )}
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="text-center space-y-6">
+            <h1 className="text-3xl font-black text-slate-800">Warehouse Check-In</h1>
+            <button 
+              onClick={() => setViewMode('FORM')}
+              className="px-8 py-4 bg-blue-600 text-white font-bold rounded-2xl shadow-xl hover:scale-105 transition-transform"
+            >
+              DAFTAR / BOOKING SLOT
+            </button>
         </div>
+      </div>
+    );
+  }
 
-        {/* DETAIL INFO */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
-            <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
-                    <Truck className="w-5 h-5" />
-                </div>
-                <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase">Tujuan</p>
-                    <p className="font-bold text-slate-800">{driver.purpose} - {driver.entryType}</p>
+  // 2. HALAMAN HASIL (RESULT)
+  if (viewMode === 'RESULT' && successData) {
+      
+      // A. Jika Status BOOKED (Sudah Approved) -> Tampilkan Tiket
+      if (successData.status === QueueStatus.BOOKED) {
+          return <TicketPass data={successData} onClose={() => window.location.reload()} />;
+      }
+
+      // B. Jika Status PENDING (Baru Daftar) -> Tampilkan KARTU KUNING
+      if (successData.status === QueueStatus.PENDING_REVIEW) {
+          return (
+              <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+                  <div className="max-w-md w-full bg-white p-8 rounded-[2.5rem] shadow-xl border border-amber-100 text-center relative overflow-hidden animate-fade-in-up">
+                      {/* Background Blob */}
+                      <div className="absolute top-[-20%] left-[-20%] w-64 h-64 bg-amber-200/30 rounded-full blur-[60px]"></div>
+                      
+                      <div className="relative z-10">
+                          <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-white shadow-sm">
+                             <Clock className="w-10 h-10 text-amber-500 animate-pulse"/>
+                          </div>
+                          
+                          <h2 className="text-2xl font-black text-slate-800 mb-2">Menunggu Konfirmasi</h2>
+                          <div className="flex justify-center mb-6">
+                            <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold uppercase tracking-wider">
+                                Status: Pending Review
+                            </span>
+                          </div>
+                          
+                          <div className="bg-slate-50 p-5 rounded-2xl text-left space-y-3 mb-8 border border-slate-100">
+                              <p className="text-sm text-slate-600">Halo <span className="font-bold text-slate-900">{successData.name}</span>,</p>
+                              <p className="text-sm text-slate-500">
+                                  Data Anda telah diterima. Admin kami sedang memverifikasi pendaftaran Anda.
+                              </p>
+                              <div className="flex gap-2 bg-blue-50 p-3 rounded-xl">
+                                  <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                                  <p className="text-xs text-blue-700 font-medium">
+                                      Cek WhatsApp Anda secara berkala. Tiket Masuk (QR) akan dikirim setelah disetujui.
+                                  </p>
+                              </div>
+                          </div>
+                          
+                          <button 
+                              onClick={() => window.location.reload()} 
+                              className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-lg hover:scale-[1.02] transition-transform"
+                          >
+                              Kembali ke Halaman Utama
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          );
+      }
+  }
+
+  // 3. FORM INPUT
+  return (
+    <div className="min-h-screen bg-white p-6 pt-10 pb-20 max-w-lg mx-auto">
+        <h2 className="text-2xl font-black text-slate-800 mb-6">Form Pendaftaran</h2>
+        
+        <div className="space-y-4">
+            <div>
+                <label className="text-sm font-bold text-slate-500">Nama Driver</label>
+                <input 
+                    type="text"
+                    className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 font-bold"
+                    value={formData.name}
+                    onChange={e => setFormData({...formData, name: e.target.value})}
+                    placeholder="Contoh: Budi Santoso"
+                />
+            </div>
+            <div>
+                <label className="text-sm font-bold text-slate-500">Nomor WhatsApp</label>
+                <input 
+                    type="tel"
+                    className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 font-bold"
+                    value={formData.phone}
+                    onChange={e => setFormData({...formData, phone: e.target.value})}
+                    placeholder="0812..."
+                />
+            </div>
+            <div>
+                <label className="text-sm font-bold text-slate-500">Plat Nomor (Tanpa Spasi)</label>
+                <input 
+                    type="text"
+                    className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 font-black text-lg uppercase"
+                    value={formData.licensePlate}
+                    onChange={e => setFormData({...formData, licensePlate: e.target.value.toUpperCase()})}
+                    placeholder="B1234XYZ"
+                />
+            </div>
+            <div>
+                <label className="text-sm font-bold text-slate-500">Nama Vendor / PT</label>
+                <input 
+                    type="text"
+                    className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 font-bold"
+                    value={formData.company}
+                    onChange={e => setFormData({...formData, company: e.target.value})}
+                    placeholder="PT. Logistik..."
+                />
+            </div>
+             <div>
+                <label className="text-sm font-bold text-slate-500">Tujuan</label>
+                <div className="flex gap-2 mt-2">
+                    <button 
+                        onClick={() => setFormData({...formData, purpose: 'LOADING'})}
+                        className={`flex-1 py-3 rounded-xl font-bold ${formData.purpose === 'LOADING' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}
+                    >
+                        Muat Barang
+                    </button>
+                    <button 
+                        onClick={() => setFormData({...formData, purpose: 'UNLOADING'})}
+                        className={`flex-1 py-3 rounded-xl font-bold ${formData.purpose === 'UNLOADING' ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-500'}`}
+                    >
+                        Bongkar Barang
+                    </button>
                 </div>
             </div>
-            
-            {driver.gate && (
-              <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center text-blue-500">
-                      <MapPin className="w-5 h-5" />
-                  </div>
-                  <div>
-                      <p className="text-xs font-bold text-slate-400 uppercase">Lokasi Gate</p>
-                      <p className="font-bold text-blue-700 text-lg">{driver.gate}</p>
-                  </div>
-              </div>
-            )}
-
-            {driver.queueNumber && (
-              <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-purple-50 rounded-full flex items-center justify-center text-purple-500">
-                      <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                      <p className="text-xs font-bold text-slate-400 uppercase">Nomor Antrian</p>
-                      <p className="font-bold text-purple-700 text-lg">{driver.queueNumber}</p>
-                  </div>
-              </div>
-            )}
         </div>
 
-        <p className="text-center text-xs text-slate-300 font-medium pt-4">
-          Terakhir diperbarui: {lastUpdate.toLocaleTimeString()}
-        </p>
+        <button 
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="w-full mt-8 py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-xl hover:bg-slate-800 disabled:opacity-50"
+        >
+            {isSubmitting ? 'Mengirim Data...' : 'Kirim Pendaftaran'}
+        </button>
 
-      </div>
+        <button 
+            onClick={() => setViewMode('START')}
+            className="w-full mt-4 py-3 text-slate-400 font-bold"
+        >
+            Batal
+        </button>
     </div>
   );
 };
 
-export default DriverStatus;
+export default DriverCheckIn;
