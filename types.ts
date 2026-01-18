@@ -1,3 +1,4 @@
+//
 export interface DriverData {
   id: string;
   name: string;
@@ -16,7 +17,7 @@ export interface DriverData {
   completedTime?: number;
   exitTime?: number;
   
-  // Data Booking (BARU - Sesuai SQL Anda)
+  // Data Booking (WAJIB ADA agar sinkron dengan SQL)
   bookingCode?: string;
   poNumber?: string;
   visitDate?: string; // Format YYYY-MM-DD
