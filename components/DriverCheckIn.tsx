@@ -192,7 +192,6 @@ const DriverCheckIn: React.FC = () => {
             Buat Booking Baru
           </button>
 
-          {/* ADDED: Tombol Navigasi Kecil */}
           <button 
             onClick={() => window.location.reload()} 
             className="mt-6 text-slate-400 font-bold text-sm hover:text-slate-600 flex items-center justify-center gap-2 mx-auto transition-colors"
@@ -471,7 +470,19 @@ const DriverCheckIn: React.FC = () => {
       {/* FOOTER ACTION BAR */}
       <div className="p-6 bg-white border-t border-slate-100 sticky bottom-0 z-10">
         <div className="flex gap-3">
-          {step > 1 && (
+          
+          {/* MODIFIKASI: Tombol Navigasi Kiri */}
+          {step === 1 ? (
+            // Jika Step 1: Tombol HOME / RESET
+            <button 
+              onClick={() => window.location.reload()} 
+              className="px-6 py-4 bg-slate-100 text-slate-400 font-bold rounded-2xl hover:bg-slate-200 hover:text-slate-600 transition-colors"
+              title="Kembali ke Awal"
+            >
+              <Home className="w-6 h-6" />
+            </button>
+          ) : (
+            // Jika Step > 1: Tombol BACK
             <button 
               onClick={() => setStep(s => s - 1)}
               className="px-6 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200"
