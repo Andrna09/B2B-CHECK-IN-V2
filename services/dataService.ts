@@ -23,7 +23,7 @@ const sendWhatsAppNotification = async (target: string, message: string): Promis
   }
 };
 
-// --- HELPER: MAPPING ---
+// --- HELPER: MAPPING (SINKRONISASI DATABASE -> APLIKASI) ---
 const mapDatabaseToDriver = (dbData: any): DriverData => ({
   id: dbData.id,
   name: dbData.name,
@@ -33,17 +33,32 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
   purpose: dbData.purpose,
   entryType: dbData.entry_type,
   status: dbData.status as QueueStatus,
+  
+  // Waktu
   checkInTime: dbData.check_in_time,
   verifiedTime: dbData.verified_time,
   calledTime: dbData.called_time,
   loadingStartTime: dbData.loading_start_time,
   completedTime: dbData.end_time,
   exitTime: dbData.exit_time,
+  
+  // Booking Data (NEW)
+  bookingCode: dbData.booking_code,
+  poNumber: dbData.po_number,
+  visitDate: dbData.visit_date,
+  slotTime: dbData.slot_time,
+  
+  // Posisi
   gate: dbData.gate,
   queueNumber: dbData.queue_number,
-  bookingCode: dbData.booking_code,
+  
+  // Dokumen
   documentUrl: dbData.document_file,
   notes: dbData.notes,
+  photoBeforeUrl: dbData.photo_before_urls,
+  photoAfterUrl: dbData.photo_after_urls,
+  
+  // Notes
   rejectionReason: dbData.rejection_reason,
   adminNotes: dbData.admin_notes,
   securityNotes: dbData.security_notes
@@ -54,19 +69,29 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
 // ============================================================================
 
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
+  // Mapping Aplikasi -> Database
+  const payload: any = {
+      name: data.name,
+      license_plate: data.licensePlate,
+      company: data.company,
+      phone: data.phone,
+      purpose: data.purpose,
+      status: QueueStatus.PENDING_REVIEW,
+      entry_type: 'BOOKING',
+      check_in_time: Date.now(),
+      document_file: docFile || '',
+      
+      // Field Baru (Wajib ada agar tersimpan)
+      po_number: data.poNumber,
+      visit_date: data.visitDate,
+      slot_time: data.slotTime,
+      notes: data.notes,
+      admin_notes: data.adminNotes
+  };
+
   const { data: insertedData, error } = await supabase
     .from('drivers')
-    .insert([{
-        name: data.name,
-        license_plate: data.licensePlate,
-        company: data.company,
-        phone: data.phone,
-        purpose: data.purpose,
-        status: QueueStatus.PENDING_REVIEW,
-        entry_type: 'BOOKING',
-        check_in_time: Date.now(),
-        document_file: docFile || ''
-    }])
+    .insert([payload])
     .select()
     .single();
 
@@ -168,39 +193,54 @@ export const checkoutDriver = async (id: string): Promise<void> => {
 };
 
 // ============================================================================
-// 2. AUTHENTICATION FUNCTIONS (INI YANG HILANG SEBELUMNYA)
+// 2. AUTHENTICATION FUNCTIONS (SUDAH FIX)
 // ============================================================================
 
-export const verifyDivisionCredential = async (divId: string, password: string): Promise<boolean> => {
-    // Cek apakah divisi ada di system_settings
+export const verifyDivisionCredential = async (divId: string, password: string): Promise<DivisionConfig | null> => {
+    // 1. Cek apakah divisi ada di system_settings
     const { data } = await supabase
         .from('system_settings')
         .select('*')
         .eq('category', 'DIVISION')
-        .eq('value', divId) // value menyimpan ID Divisi
+        .eq('value', divId)
         .single();
     
-    // SEMENTARA: Karena password belum disimpan terenkripsi, kita validasi ID saja dulu
-    // atau jika Anda menyimpan password di field 'label' dalam format "NAME|PASS", bisa di split.
-    // Untuk tahap ini, return true jika ID valid agar tidak stuck.
-    return !!data; 
+    if (!data) return null;
+
+    // 2. Logic Role Dinamis (ADMIN vs SECURITY vs MANAGER)
+    let role: 'SECURITY' | 'ADMIN' | 'MANAGER' = 'SECURITY';
+    if (divId.includes('ADMIN')) role = 'ADMIN';
+    if (divId.includes('MANAGER')) role = 'MANAGER';
+
+    return {
+        id: data.value,
+        name: data.label,
+        role: role, 
+        theme: 'blue',
+        password: '***' 
+    };
 };
 
 export const loginSystem = async (userId: string, pin: string): Promise<UserProfile | null> => {
-    // Cek user di tabel regular_drivers (sebagai tabel user sementara)
+    // Cek user di tabel regular_drivers
     const { data } = await supabase
         .from('regular_drivers')
         .select('*')
-        .eq('id', userId) // Pastikan input ID saat create user disimpan di kolom ID
-        // .eq('pin_code', pin) // Uncomment jika kolom pin_code sudah ada di DB
+        .eq('id', userId)
+        // .eq('pin_code', pin) // Uncomment jika ingin validasi PIN ketat
         .single();
 
     if (data) {
-        // Mock return profile
+        // Logic Role User: Ambil dari kolom 'phone' (sesuai script SQL reset)
+        let userRole: any = 'SECURITY';
+        if (data.phone === 'ADMIN' || data.phone === 'MANAGER') {
+             userRole = data.phone;
+        }
+
         return {
             id: data.id,
             name: data.name,
-            role: 'SECURITY', // Default role jika kolom role belum ada
+            role: userRole, 
             status: 'ACTIVE'
         } as UserProfile;
     }
@@ -230,13 +270,11 @@ export const getProfiles = async (): Promise<UserProfile[]> => {
 };
 
 export const addProfile = async (profile: UserProfile): Promise<boolean> => {
-  // Simpan user baru ke regular_drivers
   const { error } = await supabase.from('regular_drivers').insert([{
-      // Mapping field sesuai struktur DB Anda
       id: profile.id,
       name: profile.name,
-      license_plate: 'STAFF', // Dummy placeholder
-      phone: profile.role // Simpan role di phone sementara jika kolom role belum ada
+      license_plate: 'STAFF', 
+      phone: profile.role // Simpan role di phone
   }]);
   return !error;
 };
@@ -260,7 +298,7 @@ export const getDivisions = async (): Promise<DivisionConfig[]> => {
     return (data || []).map((d: any) => ({
         id: d.value,
         name: d.label,
-        role: 'SECURITY',
+        role: d.value === 'ADMIN' ? 'ADMIN' : d.value === 'MANAGER' ? 'MANAGER' : 'SECURITY',
         theme: 'blue',
         password: '***' 
     })) as DivisionConfig[];
