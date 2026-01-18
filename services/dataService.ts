@@ -1,7 +1,13 @@
 import { supabase } from './supabaseClient';
-import { DriverData, QueueStatus, GateConfig } from '../types';
+import { DriverData, QueueStatus, GateConfig, UserProfile, DivisionConfig } from '../types';
 
-// --- HELPER: WA CLIENT (Internal Fetch) ---
+// --- TIPE UNTUK DEV CONFIG ---
+export interface DevConfig {
+  enableGpsBypass: boolean;
+  enableMockOCR: boolean;
+}
+
+// --- HELPER: WA CLIENT ---
 const sendWhatsAppNotification = async (target: string, message: string): Promise<boolean> => {
   try {
     const response = await fetch('/api/whatsapp', {
@@ -44,10 +50,9 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
 });
 
 // ============================================================================
-// 1. DRIVER FLOW FUNCTIONS (ALUR BARU)
+// BAGIAN 1: DRIVER & OPERATIONAL FLOW
 // ============================================================================
 
-// CREATE (Driver Daftar) -> Status PENDING_REVIEW
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
   const { data: insertedData, error } = await supabase
     .from('drivers')
@@ -57,7 +62,7 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
         company: data.company,
         phone: data.phone,
         purpose: data.purpose,
-        status: QueueStatus.PENDING_REVIEW, // Status Awal
+        status: QueueStatus.PENDING_REVIEW,
         entry_type: 'BOOKING',
         check_in_time: Date.now(),
         document_file: docFile || ''
@@ -69,7 +74,6 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
   return insertedData ? mapDatabaseToDriver(insertedData) : null;
 };
 
-// ADMIN APPROVE
 export const approveBooking = async (id: string): Promise<boolean> => {
     const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
     const random = Math.floor(1000 + Math.random() * 9000);
@@ -91,7 +95,6 @@ export const approveBooking = async (id: string): Promise<boolean> => {
     return !error;
 };
 
-// ADMIN REJECT
 export const rejectBooking = async (id: string, reason: string): Promise<boolean> => {
     const { error } = await supabase.from('drivers').update({
         status: QueueStatus.REJECTED,
@@ -105,7 +108,6 @@ export const rejectBooking = async (id: string, reason: string): Promise<boolean
     return !error;
 };
 
-// SECURITY CHECK-IN / REVISI
 export const reviseAndCheckIn = async (id: string, revisedData: {name: string, plate: string, company: string}): Promise<boolean> => {
     const queueNo = `SOC-${Math.floor(100 + Math.random() * 900)}`; 
     const { error } = await supabase.from('drivers').update({
@@ -125,7 +127,6 @@ export const reviseAndCheckIn = async (id: string, revisedData: {name: string, p
     return !error;
 };
 
-// SECURITY TOLAK GATE
 export const rejectGate = async (id: string, reason: string): Promise<boolean> => {
     const { error } = await supabase.from('drivers').update({
         status: QueueStatus.REJECTED_NEED_REBOOK,
@@ -134,21 +135,18 @@ export const rejectGate = async (id: string, reason: string): Promise<boolean> =
     return !error;
 };
 
-// GET DRIVERS
 export const getDrivers = async (): Promise<DriverData[]> => {
   const { data, error } = await supabase.from('drivers').select('*').order('created_at', { ascending: false });
   if (error) return [];
   return data ? data.map(mapDatabaseToDriver) : [];
 };
 
-// GET DRIVER BY ID
 export const getDriverById = async (id: string): Promise<DriverData | null> => {
   const { data, error } = await supabase.from('drivers').select('*').eq('id', id).single();
   if (error) return null;
   return data ? mapDatabaseToDriver(data) : null;
 };
 
-// UPDATE STATUS (General)
 export const updateDriverStatus = async (id: string, status: QueueStatus, gate?: string): Promise<void> => {
     const updates: any = { status };
     if (status === QueueStatus.CALLED && gate) {
@@ -163,7 +161,6 @@ export const updateDriverStatus = async (id: string, status: QueueStatus, gate?:
     await supabase.from('drivers').update(updates).eq('id', id);
 };
 
-// CHECKOUT
 export const checkoutDriver = async (id: string): Promise<void> => {
     await supabase.from('drivers').update({ status: QueueStatus.EXITED, exit_time: Date.now() }).eq('id', id);
     const { data } = await supabase.from('drivers').select('phone').eq('id', id).single();
@@ -171,7 +168,7 @@ export const checkoutDriver = async (id: string): Promise<void> => {
 };
 
 // ============================================================================
-// 2. ADMIN / SYSTEM FUNCTIONS (YANG SEBELUMNYA HILANG)
+// BAGIAN 2: SYSTEM / ADMIN FUNCTIONS (YANG SEBELUMNYA HILANG)
 // ============================================================================
 
 // --- GATE CONFIGS ---
@@ -186,19 +183,19 @@ export const saveGateConfig = async (config: Partial<GateConfig>): Promise<boole
   return !error;
 };
 
-// --- PROFILES (Regular Drivers) ---
-export const getProfiles = async (): Promise<any[]> => {
-  const { data, error } = await supabase.from('regular_drivers').select('*');
-  return data || [];
+// --- PROFILES (USERS) ---
+export const getProfiles = async (): Promise<UserProfile[]> => {
+  const { data, error } = await supabase.from('regular_drivers').select('*'); // Menggunakan tabel regular_drivers sbg user profile sementara
+  return (data as any) || [];
 };
 
-export const addProfile = async (profile: any): Promise<boolean> => {
+export const addProfile = async (profile: UserProfile): Promise<boolean> => {
   const { error } = await supabase.from('regular_drivers').insert([profile]);
   return !error;
 };
 
-export const updateProfile = async (id: string, profile: any): Promise<boolean> => {
-  const { error } = await supabase.from('regular_drivers').update(profile).eq('id', id);
+export const updateProfile = async (profile: UserProfile): Promise<boolean> => {
+  const { error } = await supabase.from('regular_drivers').update(profile).eq('id', profile.id);
   return !error;
 };
 
@@ -208,34 +205,36 @@ export const deleteProfile = async (id: string): Promise<boolean> => {
 };
 
 // --- SYSTEM SETTINGS ---
-export const getSystemSettings = async (): Promise<any[]> => {
-  const { data } = await supabase.from('system_settings').select('*');
-  return data || [];
-};
-
-export const saveSystemSetting = async (setting: any): Promise<boolean> => {
-  const { error } = await supabase.from('system_settings').upsert([setting]);
-  return !error;
-};
-
 export const deleteSystemSetting = async (id: string): Promise<boolean> => {
-  const { error } = await supabase.from('system_settings').delete().eq('id', id);
+  const { error } = await supabase.from('gate_configs').delete().eq('id', id);
   return !error;
 };
 
-// --- DIVISIONS (Menggunakan System Settings kategori 'DIVISION') ---
-export const getDivisions = async (): Promise<any[]> => {
+// --- DIVISIONS ---
+export const getDivisions = async (): Promise<DivisionConfig[]> => {
     const { data } = await supabase.from('system_settings').select('*').eq('category', 'DIVISION');
-    return data || [];
+    // Transform dari format system_settings ke DivisionConfig
+    return (data || []).map((d: any) => ({
+        id: d.value,
+        name: d.label,
+        role: 'SECURITY', // Default fallback
+        theme: 'blue',
+        password: d.value // Sementara pakai value sebagai password jika belum ada kolom khusus
+    })) as DivisionConfig[];
 };
 
-export const saveDivision = async (name: string): Promise<boolean> => {
-    const { error } = await supabase.from('system_settings').insert([{ category: 'DIVISION', value: name, label: name }]);
+export const saveDivision = async (div: DivisionConfig): Promise<boolean> => {
+    // Simpan ke tabel system_settings
+    const { error } = await supabase.from('system_settings').insert([{ 
+        category: 'DIVISION', 
+        value: div.id, 
+        label: div.name 
+    }]);
     return !error;
 };
 
 export const deleteDivision = async (id: string): Promise<boolean> => {
-    const { error } = await supabase.from('system_settings').delete().eq('id', id);
+    const { error } = await supabase.from('system_settings').delete().eq('value', id);
     return !error;
 };
 
@@ -245,14 +244,13 @@ export const getActivityLogs = async (): Promise<any[]> => {
   return data || [];
 };
 
-// --- DATABASE UTILS ---
+// --- UTILS ---
 export const wipeDatabase = async (): Promise<boolean> => {
   const { error } = await supabase.from('drivers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   return !error;
 };
 
 export const seedDummyData = async (): Promise<boolean> => {
-  // Implementasi dummy data sederhana
   return true;
 };
 
@@ -270,4 +268,14 @@ export const importDatabase = async (jsonString: string): Promise<boolean> => {
     }
   } catch(e) { console.error(e); }
   return false;
+};
+
+// --- DEV CONFIG ---
+export const getDevConfig = (): DevConfig => {
+    const stored = localStorage.getItem('DEV_CONFIG');
+    return stored ? JSON.parse(stored) : { enableGpsBypass: false, enableMockOCR: false };
+};
+
+export const saveDevConfig = (config: DevConfig): void => {
+    localStorage.setItem('DEV_CONFIG', JSON.stringify(config));
 };
