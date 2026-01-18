@@ -5,7 +5,7 @@ import { QueueStatus, DriverData } from '../types';
 import TicketPass from './TicketPass'; 
 
 const DriverCheckIn: React.FC = () => {
-  // State Utama
+  // --- STATE ---
   const [viewMode, setViewMode] = useState<'SELECT_MODE' | 'BOOKING_FLOW'>('SELECT_MODE');
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,7 +21,7 @@ const DriverCheckIn: React.FC = () => {
     notes: ''
   });
   
-  // Camera & File State
+  // Camera State
   const [photo, setPhoto] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -41,9 +41,10 @@ const DriverCheckIn: React.FC = () => {
   };
 
   const handleNextStep = () => {
+      // Validasi Step 1
       if (step === 1) {
           if (!formData.name || !formData.phone || !formData.licensePlate || !formData.company) {
-              alert("Mohon lengkapi data identitas.");
+              alert("Mohon lengkapi semua data identitas.");
               return;
           }
       }
@@ -52,16 +53,16 @@ const DriverCheckIn: React.FC = () => {
 
   const handlePrevStep = () => setStep(prev => prev - 1);
 
-  // LOGIKA SUBMIT (MENGGUNAKAN LOGIC BARU: PENDING)
+  // LOGIKA SUBMIT (HYBRID: UI Lama + Logic Baru)
   const handleSubmitBooking = async () => {
     setIsSubmitting(true);
     try {
-      // Simpan data dengan status PENDING_REVIEW
+      // Panggil service yang menyimpan dengan status PENDING_REVIEW
       const result = await createCheckIn(formData, photo || undefined);
       
       if (result) {
         setSuccessData(result);
-        // Tetap di flow ini tapi render hasil (Kartu Kuning)
+        // Kita tidak mereset form agar user bisa melihat hasil (Kartu Kuning)
       }
     } catch (e: any) {
       alert("Gagal mengirim data: " + e.message);
@@ -70,9 +71,9 @@ const DriverCheckIn: React.FC = () => {
     }
   };
 
-  // --- RENDER COMPONENT ---
+  // --- RENDER UI ---
 
-  // 1. MENU AWAL
+  // 1. HALAMAN DEPAN (Desain Tombol Besar)
   if (viewMode === 'SELECT_MODE') {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden">
@@ -105,6 +106,7 @@ const DriverCheckIn: React.FC = () => {
                 </div>
             </button>
 
+            {/* Tombol Check-in Lokasi (Opsional/Dummy) */}
             <button className="group w-full bg-slate-900 p-6 rounded-[2rem] shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 text-left relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-bl-[100px] -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
                 <div className="relative z-10 flex items-center gap-6">
@@ -122,14 +124,14 @@ const DriverCheckIn: React.FC = () => {
     );
   }
 
-  // 2. HASIL PENDAFTARAN (UI BARU: PENDING / TICKET)
+  // 2. HASIL PENDAFTARAN (UI BARU)
   if (successData) {
-      // Skenario A: Tiket Hijau (Jika status sudah BOOKED)
+      // Skenario A: Jika Status sudah BOOKED (Admin Approve manual cepat atau auto-approve)
       if (successData.status === QueueStatus.BOOKED) {
           return <TicketPass data={successData} onClose={() => window.location.reload()} />;
       }
 
-      // Skenario B: Kartu Kuning (PENDING REVIEW) - Ini yang akan muncul
+      // Skenario B: PENDING REVIEW (Kartu Kuning) - Default Flow Baru
       if (successData.status === QueueStatus.PENDING_REVIEW) {
           return (
               <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -174,7 +176,7 @@ const DriverCheckIn: React.FC = () => {
       }
   }
 
-  // 3. WIZARD FORM (STEP 1, 2, 3) - Desain "Mahal" Dikembalikan
+  // 3. FORM WIZARD (STEP 1, 2, 3) - Desain yang Anda Suka
   return (
     <div className="min-h-screen bg-white p-6 pb-24">
         {/* Header Progress */}
@@ -202,7 +204,7 @@ const DriverCheckIn: React.FC = () => {
 
         <div className="max-w-2xl mx-auto space-y-6 animate-fade-in-up">
             
-            {/* STEP 1: INPUT TEXT */}
+            {/* STEP 1: IDENTITAS */}
             {step === 1 && (
                 <div className="space-y-5">
                     <div>
@@ -265,7 +267,7 @@ const DriverCheckIn: React.FC = () => {
                     <div className="bg-blue-50 p-4 rounded-2xl flex gap-3 items-start">
                         <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                         <p className="text-sm text-blue-700 font-medium">
-                            Silakan upload foto Surat Jalan (DO) atau foto kendaraan Anda.
+                            Silakan upload foto Surat Jalan (DO) atau foto kendaraan Anda sebagai bukti.
                         </p>
                     </div>
 
@@ -299,7 +301,7 @@ const DriverCheckIn: React.FC = () => {
                 </div>
             )}
 
-            {/* STEP 3: REVIEW */}
+            {/* STEP 3: REVIEW / KONFIRMASI */}
             {step === 3 && (
                 <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-4">
                     <h3 className="font-bold text-slate-400 text-xs uppercase tracking-widest mb-4">Konfirmasi Data</h3>
