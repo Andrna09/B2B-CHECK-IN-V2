@@ -1,20 +1,24 @@
-//
 import React from 'react';
 import { 
   LayoutDashboard, FileText, LogOut, 
-  Settings, Truck, ShieldCheck, User 
+  Settings, Truck, User 
 } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
   userRole?: 'ADMIN' | 'SECURITY' | 'MANAGER';
+  onLogout?: () => void; // Tambahan prop untuk handle logout
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, userRole = 'ADMIN' }) => {
+const Layout: React.FC<LayoutProps> = ({ children, userRole = 'ADMIN', onLogout }) => {
   
-  const handleLogout = () => {
+  const handleLogoutClick = () => {
     if (confirm('Keluar dari sistem?')) {
-      window.location.reload(); // Reset ke halaman login
+      if (onLogout) {
+        onLogout(); // Panggil fungsi dari App.tsx
+      } else {
+        window.location.reload(); // Fallback
+      }
     }
   };
 
@@ -72,7 +76,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userRole = 'ADMIN' }) => {
           </div>
           
           <button 
-            onClick={handleLogout}
+            onClick={handleLogoutClick}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold hover:bg-red-500 hover:text-white transition-all active:scale-95"
           >
             <LogOut className="w-4 h-4" /> KELUAR SISTEM
