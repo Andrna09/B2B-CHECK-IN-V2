@@ -12,7 +12,7 @@ import SystemOverview from './components/SystemOverview';
 import { ArrowRight, Activity, Lock, Info } from 'lucide-react';
 import { UserProfile } from './types';
 
-// --- LANDING PAGE (GAMBAR SUDAH DIKEMBALIKAN KE ASAL) ---
+// --- LANDING PAGE ---
 interface LandingPageProps {
   onNavigate: (view: string) => void;
 }
@@ -50,8 +50,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => (
       </div>
       <div className="hidden lg:block lg:col-span-7 relative h-[600px]">
         <div className="relative w-full h-full rounded-[3rem] overflow-hidden border-[6px] border-white shadow-2xl">
-           {/* KEMBALI KE GAMBAR ASLI (INDEX 1) */}
-           <img src="https://lh3.googleusercontent.com/gps-cs-s/AG0ilSyUnU3OugVJpRf26RWFVCuVaFLhm_b6RKgTqLCDJdQyybIi9U5jNGoFoF1jrRWtWJmggqd9VZm5kUwbTdKH1AG22qGrImduifg6Msj1iSgTXpqdBH0OSmX8BYhsdTZp9riWEPeDHw=s680-w680-h510-rw" alt="Sociolla Warehouse" className="w-full h-full object-cover"/>
+           {/* 🔥 UPDATE: MENGGUNAKAN GAMBAR LOKAL (Area.png) 🔥 */}
+           <img 
+             src="/Area.png" 
+             alt="Sociolla Warehouse" 
+             className="w-full h-full object-cover"
+             onError={(e) => e.currentTarget.style.display = 'none'} // Jaga-jaga kalau file tidak ketemu
+           />
            <div className="absolute bottom-8 left-8 bg-white/90 backdrop-blur-xl p-5 rounded-3xl shadow-lg max-w-xs border border-white/50">
              <h3 className="font-serif font-bold text-slate-900 text-lg">PT Social Bella Indonesia</h3>
              <p className="text-[10px] font-bold text-pink-500 uppercase tracking-widest mt-0.5">Secure Integrated System</p>
@@ -73,8 +78,7 @@ const App: React.FC = () => {
   const [transitionRole, setTransitionRole] = useState<'ADMIN' | 'SECURITY' | 'MANAGER' | null>(null);
 
   // ============================================================
-  // 🔥 [SATU-SATUNYA KODE YANG SAYA TAMBAH] 🔥
-  // Logika agar Link WA langsung membuka Tiket (Deep Link)
+  // 🔥 LOGIKA DEEP LINK WA (JANGAN DIHAPUS) 🔥
   // ============================================================
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -136,9 +140,13 @@ const App: React.FC = () => {
     <>
         {isTransitioning && (
           <div className="fixed inset-0 z-[100] bg-[#FDF2F4] flex flex-col items-center justify-center font-sans">
-              <div className="mb-6 animate-bounce w-24 h-24 bg-white rounded-3xl shadow-xl overflow-hidden border-4 border-white">
-                  {/* GAMBAR LOADING JUGA DIKEMBALIKAN KE ASAL */}
-                  <img src="https://play-lh.googleusercontent.com/J0NYr2cNJmhQiGbDXJHOqa4o9WhPeqC4BGuaD-YKp28KxH1xoW83A3dJyQMsaNwpx0Pv" alt="Sociolla" className="w-full h-full object-cover"/>
+              <div className="mb-6 animate-bounce w-24 h-24 bg-white rounded-3xl shadow-xl overflow-hidden border-4 border-white flex items-center justify-center p-2">
+                  {/* 🔥 UPDATE: MENGGUNAKAN LOGO LOKAL (Logo.png) 🔥 */}
+                  <img 
+                    src="/Logo.png" 
+                    alt="Sociolla" 
+                    className="w-full h-full object-contain"
+                  />
               </div>
               <h1 className="text-4xl font-serif font-bold text-pink-600 mb-3 tracking-tight">Sociolla</h1>
               <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] animate-pulse">Loading System...</p>
