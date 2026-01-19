@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { getDrivers, updateDriverStatus, approveBooking, rejectBooking } from '../services/dataService';
+// 🔥 Tambahkan import resendBookingNotification
+import { getDrivers, updateDriverStatus, approveBooking, rejectBooking, resendBookingNotification } from '../services/dataService';
 import { DriverData, QueueStatus } from '../types';
-import { CheckCircle, X, Search, Clock, Truck, Calendar, FileText } from 'lucide-react';
+// 🔥 Tambahkan import RefreshCw
+import { CheckCircle, X, Search, Clock, Truck, Calendar, FileText, RefreshCw } from 'lucide-react';
 
 const AdminDashboard: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<'PENDAFTARAN' | 'VERIFIKASI' | 'BONGKAR' | 'SELESAI'>('PENDAFTARAN');
@@ -20,6 +22,15 @@ const AdminDashboard: React.FC = () => {
       const interval = setInterval(fetchData, 10000); // Auto refresh
       return () => clearInterval(interval);
   }, []);
+
+  // 🔥 Fungsi Handler Resend WA 🔥
+  const handleResendWA = async (id: string) => {
+    if (confirm('Kirim ulang tiket WA ke driver ini?')) {
+        const success = await resendBookingNotification(id);
+        if (success) alert('✅ WhatsApp berhasil dikirim ulang!');
+        else alert('❌ Gagal mengirim WA. Cek koneksi/nomor.');
+    }
+  };
 
   const filteredDrivers = drivers.filter(d => {
       if (activeFilter === 'PENDAFTARAN') return d.status === QueueStatus.PENDING_REVIEW;
@@ -76,7 +87,6 @@ const AdminDashboard: React.FC = () => {
               <thead className="bg-slate-50 border-b border-slate-100">
                   <tr>
                       <th className="p-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Driver Info</th>
-                      {/* KOLOM BARU: JADWAL & PO */}
                       <th className="p-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Jadwal & PO</th>
                       <th className="p-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
                       <th className="p-6 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Aksi</th>
@@ -97,7 +107,6 @@ const AdminDashboard: React.FC = () => {
                                           <div className="font-black text-slate-800 text-lg tracking-tight">{d.licensePlate}</div>
                                           <div className="text-sm font-bold text-slate-600">{d.name}</div>
                                           <div className="text-xs text-slate-400">{d.company} • {d.phone}</div>
-                                          {/* Tampilkan Booking Code jika sudah ada */}
                                           {d.bookingCode && (
                                               <div className="mt-2 inline-block px-2 py-1 bg-amber-50 text-amber-700 text-[10px] font-bold rounded border border-amber-100">
                                                   CODE: {d.bookingCode}
@@ -108,17 +117,14 @@ const AdminDashboard: React.FC = () => {
                               </td>
                               <td className="p-6">
                                   <div className="space-y-2">
-                                      {/* Tampilkan Tanggal Visit */}
                                       <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
                                           <Calendar className="w-4 h-4 text-blue-500" />
                                           {d.visitDate || '-'} <span className="text-slate-400">@</span> {d.slotTime || '-'}
                                       </div>
-                                      {/* Tampilkan Nomor PO */}
                                       <div className="flex items-center gap-2 text-xs font-bold text-slate-500 bg-slate-50 p-1.5 rounded-lg border border-slate-100 w-fit">
                                           <FileText className="w-3 h-3" />
                                           PO: {d.poNumber || 'Tanpa PO'}
                                       </div>
-                                      {/* Tampilkan Purpose */}
                                       <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${d.purpose === 'LOADING' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
                                           {d.purpose}
                                       </span>
@@ -137,7 +143,6 @@ const AdminDashboard: React.FC = () => {
                               <td className="p-6 text-right">
                                   <div className="flex justify-end gap-2">
                                       
-                                      {/* AKSI UNTUK TAB PENDAFTARAN */}
                                       {activeFilter === 'PENDAFTARAN' && (
                                           <>
                                               <button 
@@ -167,17 +172,32 @@ const AdminDashboard: React.FC = () => {
                                           </>
                                       )}
 
-                                      {/* AKSI UNTUK TAB VERIFIKASI (Panggil Driver) */}
-                                      {activeFilter === 'VERIFIKASI' && d.status === QueueStatus.CHECKED_IN && (
-                                          <button 
-                                              onClick={() => updateDriverStatus(d.id, QueueStatus.CALLED, "DOCK-01")}
-                                              className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-slate-800"
-                                          >
-                                              PANGGIL KE DOCK
-                                          </button>
+                                      {/* TAB VERIFIKASI (ADA TOMBOL RESEND) */}
+                                      {activeFilter === 'VERIFIKASI' && (
+                                        <>
+                                          {/* 🔥 TOMBOL RESEND WA 🔥 */}
+                                          {d.status === QueueStatus.BOOKED && (
+                                              <button 
+                                                  onClick={() => handleResendWA(d.id)}
+                                                  className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                                                  title="Kirim Ulang WA"
+                                              >
+                                                  <RefreshCw className="w-4 h-4" />
+                                              </button>
+                                          )}
+
+                                          {/* TOMBOL PANGGIL */}
+                                          {d.status === QueueStatus.CHECKED_IN && (
+                                              <button 
+                                                  onClick={() => updateDriverStatus(d.id, QueueStatus.CALLED, "DOCK-01")}
+                                                  className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-slate-800"
+                                              >
+                                                  PANGGIL KE DOCK
+                                              </button>
+                                          )}
+                                        </>
                                       )}
 
-                                      {/* AKSI UNTUK TAB BONGKAR */}
                                       {activeFilter === 'BONGKAR' && (
                                           <>
                                             {d.status === QueueStatus.CALLED && (
