@@ -1,228 +1,287 @@
-import { createClient } from '@supabase/supabase-js';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { Buffer } from 'buffer';
+//
+import React, { useState, useEffect } from 'react';
+import { 
+  Calendar, Clock, User, Truck, 
+  ChevronRight, ChevronLeft, CheckCircle, Home 
+} from 'lucide-react';
+import { createCheckIn } from '../services/dataService';
+import { DriverData, QueueStatus } from '../types';
+import TicketPass from './TicketPass';
 
-// --- CONFIGURATION ---
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const DriverCheckIn: React.FC = () => {
+  const [step, setStep] = useState(1);
+  const [viewMode, setViewMode] = useState<'WIZARD' | 'RESULT'>('WIZARD');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successData, setSuccessData] = useState<DriverData | null>(null);
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("FATAL: Supabase URL atau Key belum dikonfigurasi di Environment Variables Vercel.");
-}
+  const [formData, setFormData] = useState({
+    visitDate: '',
+    slotTime: '',
+    name: '',
+    phone: '',
+    licensePlate: '',
+    company: '',
+    purpose: 'LOADING' as 'LOADING' | 'UNLOADING',
+    poNumber: '',
+    gpsLat: 0, 
+    gpsLong: 0
+  });
 
-const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: false
-  }
-});
+  const [plateInputs, setPlateInputs] = useState({ prefix: '', number: '', suffix: '' });
+  const [poInputs, setPoInputs] = useState({
+    mode: 'AUTO' as 'AUTO' | 'MANUAL',
+    entity: 'SBI',
+    year: new Date().getFullYear().toString(),
+    sequence: '',
+    manualValue: ''
+  });
 
-// --- TYPE DEFINITIONS ---
-// Definisi tipe data agar tidak menggunakan 'any'
-interface DriverPayload {
-  id: string;
-  name: string;
-  phone: string;
-  licensePlate: string;
-  company: string;
-  pic?: string;
-  purpose: string;
-  doNumber?: string;
-  itemType?: string;
-  status: string;
-  gate?: string;
-  queueNumber?: string;
-  priority?: boolean;
-  entryType: string;
-  checkInTime?: number;
-  arrivedAtGateTime?: number;
-  verifiedTime?: number;
-  calledTime?: number;
-  loadingStartTime?: number;
-  endTime?: number;
-  exitTime?: number;
-  notes?: string;
-  documentFile?: string;
-  rejectionReason?: string;
-  securityNotes?: string;
-  verifiedBy?: string;
-  calledBy?: string;
-  exitVerifiedBy?: string;
-}
-
-// Helper: Mapping CamelCase (Frontend) -> Snake_case (Database)
-const mapToDb = (data: Partial<DriverPayload>) => {
-  // Hanya ambil field yang valid untuk dikirim ke DB
-  return {
-    id: data.id,
-    name: data.name,
-    phone: data.phone,
-    license_plate: data.licensePlate,
-    company: data.company,
-    pic: data.pic,
-    purpose: data.purpose,
-    do_number: data.doNumber,
-    item_type: data.itemType,
-    status: data.status,
-    gate: data.gate,
-    queue_number: data.queueNumber,
-    priority: data.priority,
-    entry_type: data.entryType,
-    check_in_time: data.checkInTime,
-    arrived_at_gate_time: data.arrivedAtGateTime,
-    verified_time: data.verifiedTime,
-    called_time: data.calledTime,
-    loading_start_time: data.loadingStartTime,
-    end_time: data.endTime,
-    exit_time: data.exitTime,
-    notes: data.notes,
-    document_file: data.documentFile,
-    rejection_reason: data.rejectionReason,
-    security_notes: data.securityNotes,
-    verified_by: data.verifiedBy,
-    called_by: data.calledBy,
-    exit_verified_by: data.exitVerifiedBy
+  const getDailySlots = (dateString: string) => {
+      if (!dateString) return [];
+      const date = new Date(dateString);
+      const day = date.getDay(); 
+      if (day === 0 || day === 6) return []; // Libur Sabtu Minggu
+      if (day === 5) return ["08:00", "09:00", "10:00", "13:00", "14:00", "15:00", "16:00", "17:00"]; // Jumat
+      return ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"]; // Senin-Kamis
   };
+
+  const isWeekend = (dateString: string) => {
+      if (!dateString) return false;
+      const day = new Date(dateString).getDay();
+      return day === 0 || day === 6;
+  };
+
+  const currentSlots = getDailySlots(formData.visitDate);
+
+  const handlePlateInputChange = (part: 'prefix' | 'number' | 'suffix', value: string) => {
+    let clean = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (part === 'number') clean = clean.replace(/\D/g, ''); 
+    else clean = clean.replace(/[^A-Z]/g, '');
+    const newInputs = { ...plateInputs, [part]: clean };
+    setPlateInputs(newInputs);
+    setFormData(prev => ({ ...prev, licensePlate: `${newInputs.prefix} ${newInputs.number} ${newInputs.suffix}`.trim() }));
+  };
+
+  useEffect(() => {
+    if (poInputs.mode === 'AUTO') {
+      const seq = poInputs.sequence.padStart(3, '0');
+      const generated = `PO/${poInputs.entity}/${poInputs.year}/${seq}`;
+      setFormData(prev => ({ ...prev, poNumber: poInputs.sequence ? generated : '' }));
+    } else {
+      setFormData(prev => ({ ...prev, poNumber: poInputs.manualValue }));
+    }
+  }, [poInputs]);
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(/\D/g, '');
+    if (val.startsWith('0')) val = val.substring(1); 
+    if (val.startsWith('62')) val = val.substring(2); 
+    setFormData(prev => ({ ...prev, phone: val }));
+  };
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setFormData(prev => ({ ...prev, gpsLat: position.coords.latitude, gpsLong: position.coords.longitude }));
+        },
+        () => console.log('GPS skipped')
+      );
+    }
+  }, []);
+
+  const validateStep = (currentStep: number) => {
+    switch (currentStep) {
+      case 1: return formData.visitDate && formData.slotTime && !isWeekend(formData.visitDate);
+      case 2: return formData.name && formData.phone.length > 8 && plateInputs.prefix && plateInputs.number && plateInputs.suffix && formData.company;
+      case 3: return formData.poNumber && formData.poNumber.length > 3;
+      default: return false;
+    }
+  };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        name: formData.name,
+        phone: `62${formData.phone}`,
+        licensePlate: formData.licensePlate,
+        company: formData.company,
+        purpose: formData.purpose,
+        // REVISI: Mengirim field terpisah agar masuk kolom database yang benar
+        poNumber: formData.poNumber,
+        visitDate: formData.visitDate,
+        slotTime: formData.slotTime,
+        notes: `PO: ${formData.poNumber} | Slot: ${formData.visitDate} @ ${formData.slotTime}`,
+        adminNotes: formData.gpsLat ? `Booked from: ${formData.gpsLat}, ${formData.gpsLong}` : 'Location unknown'
+      };
+
+      const result = await createCheckIn(payload as any); 
+      if (result) {
+        setSuccessData(result);
+        setViewMode('RESULT');
+      }
+    } catch (e) {
+      alert('Gagal mengirim data. Silakan coba lagi.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (viewMode === 'RESULT' && successData) {
+    if (successData.status === QueueStatus.BOOKED) {
+      return <TicketPass data={successData} onClose={() => window.location.reload()} />;
+    }
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white p-8 rounded-[2rem] shadow-xl text-center animate-fade-in-up">
+          <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6">
+             <Clock className="w-10 h-10 text-amber-500 animate-pulse"/>
+          </div>
+          <h2 className="text-2xl font-black text-slate-800 mb-2">Booking Berhasil</h2>
+          <p className="text-slate-600 mb-6">
+            Data Anda telah diterima. Tunggu konfirmasi admin via WhatsApp untuk mendapatkan Tiket QR Code.
+          </p>
+          <button onClick={() => window.location.reload()} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:scale-[1.02] transition-transform">
+            Buat Booking Baru
+          </button>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-6 text-slate-400 font-bold text-sm hover:text-slate-600 flex items-center justify-center gap-2 mx-auto transition-colors"
+          >
+            <Home className="w-4 h-4" />
+            Kembali ke Halaman Awal
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- UI RENDER (Sama seperti sebelumnya, hanya memastikan fungsi logic di atas benar) ---
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto shadow-2xl min-h-screen">
+      <div className="bg-white p-6 pt-8 pb-4 border-b border-slate-100 sticky top-0 z-10">
+        <h1 className="text-xl font-black text-slate-800 flex items-center gap-2">
+          <Truck className="w-6 h-6 text-blue-600" />
+          GateFlow <span className="text-slate-300 font-normal">| Booking</span>
+        </h1>
+        <div className="flex justify-between items-center mt-6 px-2">
+          {[1, 2, 3].map((s) => (
+            <div key={s} className="flex flex-col items-center relative">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${step >= s ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-slate-100 text-slate-400'}`}>{s}</div>
+              <span className="text-[10px] font-bold mt-2 text-slate-500 uppercase tracking-wide">{s === 1 ? 'Jadwal' : s === 2 ? 'Identitas' : 'Muatan'}</span>
+              {s !== 3 && <div className={`absolute left-10 top-5 w-24 sm:w-32 h-0.5 -z-10 ${step > s ? 'bg-blue-600' : 'bg-slate-200'}`} />}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 p-6 overflow-y-auto pb-32">
+        {step === 1 && (
+          <div className="space-y-6 animate-fade-in-up">
+            <div>
+              <label className="text-sm font-bold text-slate-500 mb-2 block">Pilih Tanggal Kedatangan</label>
+              <div className="relative">
+                <Calendar className="absolute left-4 top-4 text-slate-400 w-5 h-5" />
+                <input type="date" className="w-full pl-12 p-4 bg-white rounded-xl border border-slate-200 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.visitDate} min={new Date().toISOString().split('T')[0]} onChange={e => setFormData({...formData, visitDate: e.target.value, slotTime: ''})} />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-bold text-slate-500 mb-2 block">Pilih Jam (Estimasi)</label>
+              {isWeekend(formData.visitDate) ? (
+                  <div className="p-4 bg-red-50 rounded-xl border border-red-100 text-center"><p className="text-red-500 font-bold text-sm">Hari libur, silakan pilih tanggal lain.</p></div>
+              ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    {currentSlots.length > 0 ? (currentSlots.map(slot => (<button key={slot} onClick={() => setFormData({...formData, slotTime: slot})} className={`py-3 rounded-xl font-bold text-sm border-2 transition-all ${formData.slotTime === slot ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-transparent bg-white text-slate-600 hover:bg-slate-100'}`}>{slot}</button>))) : (<div className="col-span-3 text-center py-4 text-slate-400 text-sm italic">Silakan pilih tanggal terlebih dahulu</div>)}
+                  </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-5 animate-fade-in-up">
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Nama Lengkap</label>
+              <div className="relative">
+                <User className="absolute left-4 top-3.5 text-slate-400 w-5 h-5" />
+                <input type="text" placeholder="Sesuai KTP / SIM" className="w-full pl-12 p-3 bg-white rounded-xl border border-slate-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Nomor WhatsApp</label>
+              <div className="flex">
+                <div className="bg-slate-100 border border-slate-200 border-r-0 rounded-l-xl px-4 flex items-center font-bold text-slate-500">🇮🇩 +62</div>
+                <input type="tel" placeholder="812xxxx (Tanpa 0)" className="flex-1 p-3 bg-white rounded-r-xl border border-slate-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none" value={formData.phone} onChange={handlePhoneChange} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Plat Nomor</label>
+              <div className="flex gap-2">
+                <input type="text" placeholder="B" maxLength={2} className="w-16 p-3 text-center bg-white rounded-xl border border-slate-200 font-black text-lg uppercase focus:ring-2 focus:ring-blue-500 outline-none" value={plateInputs.prefix} onChange={e => handlePlateInputChange('prefix', e.target.value)} />
+                <input type="text" placeholder="1234" maxLength={4} className="flex-1 p-3 text-center bg-white rounded-xl border border-slate-200 font-black text-lg focus:ring-2 focus:ring-blue-500 outline-none" value={plateInputs.number} onChange={e => handlePlateInputChange('number', e.target.value)} />
+                <input type="text" placeholder="XYZ" maxLength={3} className="w-20 p-3 text-center bg-white rounded-xl border border-slate-200 font-black text-lg uppercase focus:ring-2 focus:ring-blue-500 outline-none" value={plateInputs.suffix} onChange={e => handlePlateInputChange('suffix', e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Nama Vendor / PT</label>
+              <input type="text" placeholder="Ex: PT. Logistik Indonesia" className="w-full p-3 bg-white rounded-xl border border-slate-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} />
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-6 animate-fade-in-up">
+            <div className="flex p-1 bg-slate-200 rounded-xl">
+              <button onClick={() => setFormData({...formData, purpose: 'LOADING'})} className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${formData.purpose === 'LOADING' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>MUAT BARANG</button>
+              <button onClick={() => setFormData({...formData, purpose: 'UNLOADING'})} className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${formData.purpose === 'UNLOADING' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500'}`}>BONGKAR BARANG</button>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex justify-between items-center mb-4">
+                <label className="text-xs font-bold text-slate-400 uppercase">Nomor PO / DO</label>
+                <div className="flex gap-2">
+                    <button onClick={() => setPoInputs({...poInputs, mode: 'AUTO'})} className={`text-[10px] px-2 py-1 rounded font-bold ${poInputs.mode === 'AUTO' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>AUTO</button>
+                    <button onClick={() => setPoInputs({...poInputs, mode: 'MANUAL'})} className={`text-[10px] px-2 py-1 rounded font-bold ${poInputs.mode === 'MANUAL' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>MANUAL</button>
+                </div>
+              </div>
+              {poInputs.mode === 'AUTO' ? (
+                <div className="space-y-3">
+                    <div className="flex gap-2">
+                        <select className="p-2 bg-slate-50 rounded-lg font-bold text-sm border border-slate-200" value={poInputs.entity} onChange={(e) => setPoInputs({...poInputs, entity: e.target.value})}>
+                            <option value="SBI">SBI</option>
+                            <option value="SDI">SDI</option>
+                        </select>
+                        <input type="number" className="w-20 p-2 bg-slate-50 rounded-lg font-bold text-sm border border-slate-200 text-center" value={poInputs.year} onChange={(e) => setPoInputs({...poInputs, year: e.target.value})} />
+                        <input type="number" placeholder="Urutan (ex: 1)" className="flex-1 p-2 bg-slate-50 rounded-lg font-bold text-sm border border-slate-200" value={poInputs.sequence} onChange={(e) => setPoInputs({...poInputs, sequence: e.target.value})} />
+                    </div>
+                    <div className="p-3 bg-blue-50 rounded-lg text-center border border-blue-100">
+                        <span className="text-xs text-blue-400 font-semibold block mb-1">Preview PO Number</span>
+                        <span className="text-lg font-mono font-black text-blue-800 tracking-wider">{formData.poNumber || 'PO/---/---/---'}</span>
+                    </div>
+                </div>
+              ) : (
+                <input type="text" placeholder="Input Manual..." className="w-full p-3 bg-slate-50 rounded-lg font-bold border border-slate-200" value={poInputs.manualValue} onChange={(e) => setPoInputs({...poInputs, manualValue: e.target.value})} />
+              )}
+            </div>
+            <div className="p-3 bg-slate-100 rounded-lg text-xs text-slate-500 text-center">Pastikan data yang Anda isi sudah benar sebelum mengirim pendaftaran.</div>
+          </div>
+        )}
+      </div>
+
+      <div className="p-6 bg-white border-t border-slate-100 sticky bottom-0 z-10">
+        <div className="flex gap-3">
+          {step === 1 ? (
+            <button onClick={() => window.location.reload()} className="px-6 py-4 bg-slate-100 text-slate-400 font-bold rounded-2xl hover:bg-slate-200 hover:text-slate-600 transition-colors" title="Kembali ke Awal"><Home className="w-6 h-6" /></button>
+          ) : (
+            <button onClick={() => setStep(s => s - 1)} className="px-6 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200"><ChevronLeft className="w-6 h-6" /></button>
+          )}
+          <button onClick={() => { if(step < 3) setStep(s => s + 1); else handleSubmit(); }} disabled={!validateStep(step) || isSubmitting} className={`flex-1 py-4 font-bold rounded-2xl shadow-xl flex items-center justify-center gap-2 transition-all ${!validateStep(step) || isSubmitting ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 hover:scale-[1.02]'}`}>
+            {isSubmitting ? <span>Memproses...</span> : step === 3 ? <>Kirim Booking <CheckCircle className="w-5 h-5" /></> : <>Lanjut <ChevronRight className="w-5 h-5" /></>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-// Helper: Mapping Snake_case (Database) -> CamelCase (Frontend)
-const mapToFrontend = (row: Record<string, any>): DriverPayload => ({
-  id: row.id,
-  name: row.name,
-  phone: row.phone,
-  licensePlate: row.license_plate,
-  company: row.company,
-  pic: row.pic,
-  purpose: row.purpose,
-  doNumber: row.do_number,
-  itemType: row.item_type,
-  status: row.status,
-  gate: row.gate,
-  queueNumber: row.queue_number,
-  priority: row.priority,
-  entryType: row.entry_type,
-  checkInTime: Number(row.check_in_time),
-  arrivedAtGateTime: row.arrived_at_gate_time ? Number(row.arrived_at_gate_time) : undefined,
-  verifiedTime: row.verified_time ? Number(row.verified_time) : undefined,
-  calledTime: row.called_time ? Number(row.called_time) : undefined,
-  loadingStartTime: row.loading_start_time ? Number(row.loading_start_time) : undefined,
-  endTime: row.end_time ? Number(row.end_time) : undefined,
-  exitTime: row.exit_time ? Number(row.exit_time) : undefined,
-  notes: row.notes,
-  documentFile: row.document_file,
-  rejectionReason: row.rejection_reason,
-  securityNotes: row.security_notes,
-  verifiedBy: row.verified_by,
-  calledBy: row.called_by,
-  exitVerifiedBy: row.exit_verified_by
-});
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Handling
-  res.setHeader('Access-Control-Allow-Credentials', "true");
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const { action, data } = req.body;
-
-  try {
-    // --- READ (GET ALL) ---
-    if (action === 'GET') {
-      const { data: rows, error } = await supabase
-        .from('drivers')
-        .select('*')
-        .order('check_in_time', { ascending: false })
-        .limit(500);
-
-      if (error) throw error;
-
-      const formatted = rows ? rows.map(mapToFrontend) : [];
-      return res.status(200).json(formatted);
-    }
-
-    // --- CREATE ---
-    if (action === 'CREATE') {
-      const inputData = data as DriverPayload;
-      let documentUrl = inputData.documentFile;
-
-      // 1. Upload Base64 Image to Supabase Storage
-      if (documentUrl && documentUrl.startsWith('data:')) {
-        try {
-           const base64Data = documentUrl.split(',')[1];
-           const buffer = Buffer.from(base64Data, 'base64');
-           const fileName = `SJ_${inputData.id}_${Date.now()}.jpg`;
-
-           const { error: uploadError } = await supabase
-             .storage
-             .from('documents')
-             .upload(fileName, buffer, {
-                contentType: 'image/jpeg',
-                upsert: true
-             });
-
-           if (uploadError) throw uploadError;
-
-           const { data: publicUrlData } = supabase
-             .storage
-             .from('documents')
-             .getPublicUrl(fileName);
-
-           documentUrl = publicUrlData.publicUrl;
-
-        } catch (err) {
-           console.error("Storage Upload Error:", err);
-           documentUrl = "Upload Failed";
-        }
-      }
-
-      // 2. Insert to DB
-      const dbPayload = mapToDb({ ...inputData, documentFile: documentUrl });
-
-      const { error } = await supabase
-        .from('drivers')
-        .insert([dbPayload]);
-
-      if (error) throw error;
-
-      return res.status(200).json({ success: true, fileUrl: documentUrl });
-    }
-
-    // --- UPDATE ---
-    if (action === 'UPDATE') {
-      const inputData = data as DriverPayload;
-      const dbPayload = mapToDb(inputData);
-      
-      // Remove ID from payload body to avoid trying to update PK
-      // Gunakan destructuring untuk memisahkan id
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id, ...updateFields } = dbPayload;
-
-      if (!inputData.id) {
-          throw new Error("Update failed: Missing ID");
-      }
-
-      const { error } = await supabase
-        .from('drivers')
-        .update(updateFields)
-        .eq('id', inputData.id);
-
-      if (error) throw error;
-
-      return res.status(200).json({ success: true });
-    }
-
-    return res.status(400).json({ error: 'Invalid Action' });
-
-  } catch (error: any) {
-    console.error('Supabase API Error:', error);
-    return res.status(500).json({ error: error.message || 'Internal Server Error' });
-  }
-}
+export default DriverCheckIn;
