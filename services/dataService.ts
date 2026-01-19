@@ -1,7 +1,6 @@
 import { supabase } from './supabaseClient';
 import { DriverData, QueueStatus, GateConfig, UserProfile, DivisionConfig } from '../types';
 
-// Helper WA (Tetap sama)
 const sendWhatsAppNotification = async (target: string, message: string): Promise<boolean> => {
   try {
     const response = await fetch('/api/whatsapp', {
@@ -47,7 +46,6 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
   securityNotes: dbData.security_notes
 });
 
-// Create CheckIn (Tetap sama)
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
   const payload: any = {
       name: data.name,
@@ -65,13 +63,11 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
       notes: data.notes,
       admin_notes: data.adminNotes
   };
-
   const { data: insertedData, error } = await supabase.from('drivers').insert([payload]).select().single();
   if (error) { console.error('Error creating check-in:', error); throw error; }
   return insertedData ? mapDatabaseToDriver(insertedData) : null;
 };
 
-// Approve Booking (Tetap sama)
 export const approveBooking = async (id: string): Promise<boolean> => {
     const { data: driver, error: fetchError } = await supabase.from('drivers').select('purpose, name, phone').eq('id', id).single();
     if (fetchError || !driver) return false;
@@ -79,7 +75,6 @@ export const approveBooking = async (id: string): Promise<boolean> => {
     const year = new Date().getFullYear();
     const type = driver.purpose === 'UNLOADING' ? 'IN' : 'OUT';
     const prefix = `SOC-${type}-${year}-`;
-
     const { data: latestEntry } = await supabase.from('drivers').select('booking_code').ilike('booking_code', `${prefix}%`).order('booking_code', { ascending: false }).limit(1).single();
 
     let sequence = 1;
@@ -104,7 +99,6 @@ export const approveBooking = async (id: string): Promise<boolean> => {
     return !error;
 };
 
-// Reject Booking (Tetap sama)
 export const rejectBooking = async (id: string, reason: string): Promise<boolean> => {
     const { error } = await supabase.from('drivers').update({ status: QueueStatus.REJECTED, rejection_reason: reason }).eq('id', id);
     if (!error) {
@@ -114,25 +108,16 @@ export const rejectBooking = async (id: string, reason: string): Promise<boolean
     return !error;
 };
 
-// 🔥 UPDATE: FUNGSI REVISI GATE DENGAN AUDIT LOG 🔥
+// 🔥 FUNGSI UTAMA: REVISI + LOG + WA LINK BARU 🔥
 export const reviseAndCheckIn = async (
     id: string, 
-    revisedData: {
-        name: string, 
-        plate: string, 
-        company: string, 
-        phone?: string,   
-        purpose?: string  
-    }
+    revisedData: { name: string, plate: string, company: string, phone?: string, purpose?: string }
 ): Promise<boolean> => {
-    
-    // Ambil Data Lama
     const { data: oldData } = await supabase.from('drivers').select('*').eq('id', id).single();
     
-    // Buat Log Perubahan
     let revisionLog = '';
     if(oldData) {
-        revisionLog = `[GATE REVISION ${new Date().toLocaleTimeString()}]
+        revisionLog = `[GATE REVISION ${new Date().toLocaleTimeString('id-ID')}]
         Plat: ${oldData.license_plate} -> ${revisedData.plate}
         Nama: ${oldData.name} -> ${revisedData.name}
         PT: ${oldData.company} -> ${revisedData.company}
@@ -148,46 +133,40 @@ export const reviseAndCheckIn = async (
         company: revisedData.company,
         phone: revisedData.phone || oldData.phone,
         purpose: revisedData.purpose || oldData.purpose,
-        
-        status: QueueStatus.CHECKED_IN,
+        status: QueueStatus.CHECKED_IN, 
         queue_number: queueNo,
-        verified_time: Date.now(),
-        
-        // Simpan Log di Notes
+        verified_time: Date.now(),      
         security_notes: oldData.security_notes ? `${oldData.security_notes}\n\n${revisionLog}` : revisionLog
     }).eq('id', id);
 
     if (!error) {
         const targetPhone = revisedData.phone || oldData.phone;
-        if (targetPhone) await sendWhatsAppNotification(targetPhone, `CHECK-IN BERHASIL.\nNomor Antrian: *${queueNo}*.\nPlat: ${revisedData.plate}\nSilakan parkir dan tunggu panggilan.`);
+        if (targetPhone) {
+            const appUrl = `${window.location.origin}?ticket_id=${id}`;
+            const msg = `*CHECK-IN BERHASIL!* 🏁\n\nNomor Antrian: *${queueNo}*\nPlat: ${revisedData.plate}\n\nTiket Anda sudah berubah status menjadi *TIKET ANTRIAN* (Warna Hijau).\n\n👇 *KLIK UNTUK LIHAT TIKET BARU:* 👇\n${appUrl}\n\nSilakan parkir dan tunggu panggilan di TV Monitor.`;
+            await sendWhatsAppNotification(targetPhone, msg);
+        }
     }
     return !error;
 };
 
-// Reject Gate (Tetap sama)
 export const rejectGate = async (id: string, reason: string): Promise<boolean> => {
-    const { error } = await supabase.from('drivers').update({
-        status: QueueStatus.REJECTED_NEED_REBOOK,
-        rejection_reason: reason
-    }).eq('id', id);
+    const { error } = await supabase.from('drivers').update({ status: QueueStatus.REJECTED_NEED_REBOOK, rejection_reason: reason }).eq('id', id);
     return !error;
 };
 
-// Get Drivers (Tetap sama)
 export const getDrivers = async (): Promise<DriverData[]> => {
   const { data, error } = await supabase.from('drivers').select('*').order('created_at', { ascending: false });
   if (error) return [];
   return data ? data.map(mapDatabaseToDriver) : [];
 };
 
-// Get Driver By ID (Tetap sama)
 export const getDriverById = async (id: string): Promise<DriverData | null> => {
   const { data, error } = await supabase.from('drivers').select('*').eq('id', id).single();
   if (error) return null;
   return data ? mapDatabaseToDriver(data) : null;
 };
 
-// Update Driver Status (Tetap sama)
 export const updateDriverStatus = async (id: string, status: QueueStatus, gate?: string): Promise<void> => {
     const updates: any = { status };
     if (status === QueueStatus.CALLED && gate) {
@@ -198,18 +177,16 @@ export const updateDriverStatus = async (id: string, status: QueueStatus, gate?:
     }
     if (status === QueueStatus.LOADING) updates.loading_start_time = Date.now();
     if (status === QueueStatus.COMPLETED) updates.end_time = Date.now();
-    
     await supabase.from('drivers').update(updates).eq('id', id);
 };
 
-// Checkout Driver (Tetap sama)
 export const checkoutDriver = async (id: string): Promise<void> => {
     await supabase.from('drivers').update({ status: QueueStatus.EXITED, exit_time: Date.now() }).eq('id', id);
     const { data } = await supabase.from('drivers').select('phone').eq('id', id).single();
     if(data?.phone) await sendWhatsAppNotification(data.phone, `EXIT PASS.\nTerima kasih, hati-hati di jalan.`);
 };
 
-// Auth & Config Functions (Tetap sama)
+// Bagian Login & System (Tetap sama, tidak perlu diubah)
 export const verifyDivisionCredential = async (divId: string, password: string): Promise<DivisionConfig | null> => {
     const { data } = await supabase.from('system_settings').select('*').eq('category', 'DIVISION').eq('value', divId).single();
     if (!data) return null;
@@ -218,7 +195,6 @@ export const verifyDivisionCredential = async (divId: string, password: string):
     if (divId.includes('MANAGER')) role = 'MANAGER';
     return { id: data.value, name: data.label, role: role, theme: 'blue', password: '***' };
 };
-
 export const loginSystem = async (userId: string, pin: string): Promise<UserProfile | null> => {
     const { data } = await supabase.from('regular_drivers').select('*').eq('id', userId).single();
     if (data) {
@@ -228,79 +204,60 @@ export const loginSystem = async (userId: string, pin: string): Promise<UserProf
     }
     return null;
 };
-
 export const getGateConfigs = async (): Promise<GateConfig[]> => {
   const { data, error } = await supabase.from('gate_configs').select('*').order('name', { ascending: true });
   if (error) return [];
   return data || [];
 };
-
 export const saveGateConfig = async (config: Partial<GateConfig>): Promise<boolean> => {
   const { error } = await supabase.from('gate_configs').upsert([config]);
   return !error;
 };
-
 export const getProfiles = async (): Promise<UserProfile[]> => {
   const { data } = await supabase.from('regular_drivers').select('*');
   return (data as any) || [];
 };
-
 export const addProfile = async (profile: UserProfile): Promise<boolean> => {
-  const { error } = await supabase.from('regular_drivers').insert([{
-      id: profile.id, name: profile.name, license_plate: 'STAFF', phone: profile.role
-  }]);
+  const { error } = await supabase.from('regular_drivers').insert([{ id: profile.id, name: profile.name, license_plate: 'STAFF', phone: profile.role }]);
   return !error;
 };
-
 export const updateProfile = async (profile: UserProfile): Promise<boolean> => {
   const { error } = await supabase.from('regular_drivers').update({ name: profile.name, phone: profile.role }).eq('id', profile.id);
   return !error;
 };
-
 export const deleteProfile = async (id: string): Promise<boolean> => {
   const { error } = await supabase.from('regular_drivers').delete().eq('id', id);
   return !error;
 };
-
 export const getDivisions = async (): Promise<DivisionConfig[]> => {
     const { data } = await supabase.from('system_settings').select('*').eq('category', 'DIVISION');
-    return (data || []).map((d: any) => ({
-        id: d.value, name: d.label, role: d.value === 'ADMIN' ? 'ADMIN' : d.value === 'MANAGER' ? 'MANAGER' : 'SECURITY', theme: 'blue', password: '***' 
-    })) as DivisionConfig[];
+    return (data || []).map((d: any) => ({ id: d.value, name: d.label, role: d.value === 'ADMIN' ? 'ADMIN' : d.value === 'MANAGER' ? 'MANAGER' : 'SECURITY', theme: 'blue', password: '***' })) as DivisionConfig[];
 };
-
 export const saveDivision = async (div: DivisionConfig): Promise<boolean> => {
     const { error } = await supabase.from('system_settings').insert([{ category: 'DIVISION', value: div.id, label: div.name }]);
     return !error;
 };
-
 export const deleteDivision = async (id: string): Promise<boolean> => {
     const { error } = await supabase.from('system_settings').delete().eq('value', id);
     return !error;
 };
-
 export const deleteSystemSetting = async (id: string): Promise<boolean> => {
     const { error } = await supabase.from('gate_configs').delete().eq('id', id);
     return !error;
 };
-
 export const getActivityLogs = async (): Promise<any[]> => {
   const { data } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(50);
   return data || [];
 };
-
 export const wipeDatabase = async (): Promise<boolean> => {
   const { error } = await supabase.from('drivers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   return !error;
 };
-
 export const seedDummyData = async (): Promise<boolean> => { return true; };
-
 export const exportDatabase = async (): Promise<string> => {
   const { data } = await supabase.from('drivers').select('*');
   return JSON.stringify(data || []);
 };
-
 export const importDatabase = async (jsonString: string): Promise<boolean> => {
   try {
     const data = JSON.parse(jsonString);
@@ -311,20 +268,9 @@ export const importDatabase = async (jsonString: string): Promise<boolean> => {
   } catch(e) { console.error(e); }
   return false;
 };
-
-export const getDevConfig = (): DevConfig => {
-    const stored = localStorage.getItem('DEV_CONFIG');
-    return stored ? JSON.parse(stored) : { enableGpsBypass: false, enableMockOCR: false };
-};
-
-export const saveDevConfig = (config: DevConfig): void => {
-    localStorage.setItem('DEV_CONFIG', JSON.stringify(config));
-};
-
 export const resendBookingNotification = async (id: string): Promise<boolean> => {
     const { data: driver, error } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (error || !driver || !driver.booking_code) return false;
-
     if (driver.phone) {
          const appUrl = `${window.location.origin}?ticket_id=${id}`;
          const msg = `*PENGIRIMAN ULANG TIKET* 🔄\n\nHalo ${driver.name},\nKode Booking: *${driver.booking_code}*\n\n👇 *KLIK LINK UNTUK DOWNLOAD TIKET:* 👇\n${appUrl}\n\nSimpan pesan ini baik-baik ya.`;
