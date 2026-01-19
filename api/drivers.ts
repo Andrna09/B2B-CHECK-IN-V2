@@ -3,56 +3,89 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Buffer } from 'buffer';
 
 // --- CONFIGURATION ---
-// SECURITY UPDATE: Menggunakan Environment Variables Server-Side
-// Tidak ada lagi hardcoded key di sini.
-
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Validasi Keamanan: Pastikan server punya kunci sebelum lanjut
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("FATAL: Supabase URL atau Key belum dikonfigurasi di Environment Variables Vercel.");
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    persistSession: false // Serverless mode
+    persistSession: false
   }
 });
 
-// Mapping CamelCase (Frontend) <-> Snake_case (Database)
-const mapToDb = (data: any) => ({
-  id: data.id,
-  name: data.name,
-  phone: data.phone,
-  license_plate: data.licensePlate,
-  company: data.company,
-  pic: data.pic,
-  purpose: data.purpose,
-  do_number: data.doNumber,
-  item_type: data.itemType,
-  status: data.status,
-  gate: data.gate,
-  queue_number: data.queueNumber,
-  priority: data.priority,
-  entry_type: data.entryType,
-  check_in_time: data.checkInTime,
-  arrived_at_gate_time: data.arrivedAtGateTime,
-  verified_time: data.verifiedTime,
-  called_time: data.calledTime,
-  loading_start_time: data.loadingStartTime,
-  end_time: data.endTime,
-  exit_time: data.exitTime,
-  notes: data.notes,
-  document_file: data.documentFile,
-  rejection_reason: data.rejectionReason,
-  security_notes: data.securityNotes,
-  verified_by: data.verifiedBy,
-  called_by: data.calledBy,
-  exit_verified_by: data.exitVerifiedBy
-});
+// --- TYPE DEFINITIONS ---
+// Definisi tipe data agar tidak menggunakan 'any'
+interface DriverPayload {
+  id: string;
+  name: string;
+  phone: string;
+  licensePlate: string;
+  company: string;
+  pic?: string;
+  purpose: string;
+  doNumber?: string;
+  itemType?: string;
+  status: string;
+  gate?: string;
+  queueNumber?: string;
+  priority?: boolean;
+  entryType: string;
+  checkInTime?: number;
+  arrivedAtGateTime?: number;
+  verifiedTime?: number;
+  calledTime?: number;
+  loadingStartTime?: number;
+  endTime?: number;
+  exitTime?: number;
+  notes?: string;
+  documentFile?: string;
+  rejectionReason?: string;
+  securityNotes?: string;
+  verifiedBy?: string;
+  calledBy?: string;
+  exitVerifiedBy?: string;
+}
 
-const mapToFrontend = (row: any) => ({
+// Helper: Mapping CamelCase (Frontend) -> Snake_case (Database)
+const mapToDb = (data: Partial<DriverPayload>) => {
+  // Hanya ambil field yang valid untuk dikirim ke DB
+  return {
+    id: data.id,
+    name: data.name,
+    phone: data.phone,
+    license_plate: data.licensePlate,
+    company: data.company,
+    pic: data.pic,
+    purpose: data.purpose,
+    do_number: data.doNumber,
+    item_type: data.itemType,
+    status: data.status,
+    gate: data.gate,
+    queue_number: data.queueNumber,
+    priority: data.priority,
+    entry_type: data.entryType,
+    check_in_time: data.checkInTime,
+    arrived_at_gate_time: data.arrivedAtGateTime,
+    verified_time: data.verifiedTime,
+    called_time: data.calledTime,
+    loading_start_time: data.loadingStartTime,
+    end_time: data.endTime,
+    exit_time: data.exitTime,
+    notes: data.notes,
+    document_file: data.documentFile,
+    rejection_reason: data.rejectionReason,
+    security_notes: data.securityNotes,
+    verified_by: data.verifiedBy,
+    called_by: data.calledBy,
+    exit_verified_by: data.exitVerifiedBy
+  };
+};
+
+// Helper: Mapping Snake_case (Database) -> CamelCase (Frontend)
+const mapToFrontend = (row: Record<string, any>): DriverPayload => ({
   id: row.id,
   name: row.name,
   phone: row.phone,
@@ -67,7 +100,7 @@ const mapToFrontend = (row: any) => ({
   queueNumber: row.queue_number,
   priority: row.priority,
   entryType: row.entry_type,
-  checkInTime: Number(row.check_in_time), // Ensure number
+  checkInTime: Number(row.check_in_time),
   arrivedAtGateTime: row.arrived_at_gate_time ? Number(row.arrived_at_gate_time) : undefined,
   verifiedTime: row.verified_time ? Number(row.verified_time) : undefined,
   calledTime: row.called_time ? Number(row.called_time) : undefined,
@@ -103,7 +136,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // --- READ (GET ALL) ---
     if (action === 'GET') {
-      // Ambil 500 data terakhir, urutkan dari yang terbaru (check_in_time)
       const { data: rows, error } = await supabase
         .from('drivers')
         .select('*')
@@ -112,24 +144,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (error) throw error;
 
-      const formatted = rows.map(mapToFrontend);
+      const formatted = rows ? rows.map(mapToFrontend) : [];
       return res.status(200).json(formatted);
     }
 
     // --- CREATE ---
     if (action === 'CREATE') {
-      let documentUrl = data.documentFile;
+      const inputData = data as DriverPayload;
+      let documentUrl = inputData.documentFile;
 
       // 1. Upload Base64 Image to Supabase Storage
-      if (data.documentFile && data.documentFile.startsWith('data:')) {
+      if (documentUrl && documentUrl.startsWith('data:')) {
         try {
-           const base64Data = data.documentFile.split(',')[1];
+           const base64Data = documentUrl.split(',')[1];
            const buffer = Buffer.from(base64Data, 'base64');
+           const fileName = `SJ_${inputData.id}_${Date.now()}.jpg`;
 
-           // Generate unique filename
-           const fileName = `SJ_${data.id}_${Date.now()}.jpg`;
-
-           const { data: uploadData, error: uploadError } = await supabase
+           const { error: uploadError } = await supabase
              .storage
              .from('documents')
              .upload(fileName, buffer, {
@@ -139,7 +170,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
            if (uploadError) throw uploadError;
 
-           // Get Public URL
            const { data: publicUrlData } = supabase
              .storage
              .from('documents')
@@ -154,7 +184,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // 2. Insert to DB
-      const dbPayload = mapToDb({ ...data, documentFile: documentUrl });
+      const dbPayload = mapToDb({ ...inputData, documentFile: documentUrl });
 
       const { error } = await supabase
         .from('drivers')
@@ -167,14 +197,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // --- UPDATE ---
     if (action === 'UPDATE') {
-      const dbPayload = mapToDb(data);
+      const inputData = data as DriverPayload;
+      const dbPayload = mapToDb(inputData);
+      
       // Remove ID from payload body to avoid trying to update PK
+      // Gunakan destructuring untuk memisahkan id
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, ...updateFields } = dbPayload;
+
+      if (!inputData.id) {
+          throw new Error("Update failed: Missing ID");
+      }
 
       const { error } = await supabase
         .from('drivers')
         .update(updateFields)
-        .eq('id', data.id);
+        .eq('id', inputData.id);
 
       if (error) throw error;
 
@@ -185,6 +223,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error('Supabase API Error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }
