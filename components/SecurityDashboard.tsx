@@ -1,213 +1,444 @@
 import React, { useState, useEffect } from 'react';
-import { getDrivers, reviseAndCheckIn, rejectGate, checkoutDriver } from '../services/dataService';
-import { DriverData, QueueStatus } from '../types';
-import { Search, Edit2, CheckCircle, XCircle, LogOut } from 'lucide-react';
+import { Truck, Search, LogOut, Shield, AlertTriangle, Clock, Edit2, CheckSquare, XCircle, ChevronRight, Filter, QrCode } from 'lucide-react';
+import { DriverData, QueueStatus, UserProfile } from '../types';
+// Menggunakan fungsi service yang sudah ada (logika asli tidak berubah)
+import { getDrivers, reviseAndCheckIn, checkoutDriver, rejectGate } from '../services/dataService';
+import { Scanner } from '@yudiel/react-qr-scanner';
 
-const SecurityDashboard: React.FC = () => {
-  const [view, setView] = useState<'DASHBOARD' | 'VERIFY'>('DASHBOARD');
+interface Props {
+  onBack: () => void;
+  currentUser: UserProfile | null;
+}
+
+const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
+  // State Utama
+  const [activeTab, setActiveTab] = useState<'QUEUE' | 'INSIDE' | 'HISTORY'>('QUEUE');
   const [drivers, setDrivers] = useState<DriverData[]>([]);
-  const [scannedDriver, setScannedDriver] = useState<DriverData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(''); 
   
-  // STATE REVISI
+  // State Scanner & Modal Inspeksi
+  const [showScanner, setShowScanner] = useState(false);
+  const [inspectDriver, setInspectDriver] = useState<DriverData | null>(null);
+  
+  // State Fitur Revisi (LOGIKA ASLI BAPAK)
   const [isRevising, setIsRevising] = useState(false);
   const [reviseForm, setReviseForm] = useState({ name: '', plate: '', company: '' });
 
+  // State Checklist (Fitur Tambahan)
+  const [checklist, setChecklist] = useState({
+    suratJalan: false,
+    safetyShoes: false,
+    vest: false,
+    helmet: false,
+    vehicleCondition: false
+  });
+
   const fetchData = async () => {
-      const data = await getDrivers();
-      setDrivers(data);
+    setLoading(true);
+    const data = await getDrivers();
+    if(data) setDrivers(data);
+    setLoading(false);
   };
 
   useEffect(() => {
-      fetchData();
-      const interval = setInterval(fetchData, 10000);
-      return () => clearInterval(interval);
+    fetchData();
+    const interval = setInterval(fetchData, 10000); 
+    return () => clearInterval(interval);
   }, []);
 
-  // Simulasi Scan QR (Di lapangan pakai library QR Scanner)
-  const handleSimulateScan = (bookingCode: string) => {
-      const found = drivers.find(d => d.bookingCode === bookingCode && d.status === QueueStatus.BOOKED);
-      if (found) {
-          setScannedDriver(found);
-          setView('VERIFY');
-      } else {
-          alert('Data Booking Tidak Ditemukan atau Status Salah!');
+  // --- LOGIC FILTER (Pencarian & Tab) ---
+  const filteredDrivers = drivers.filter(d => {
+    let matchTab = false;
+    // Tab QUEUE: Hanya menampilkan yang BOOKED atau CHECKED_IN (Antrian Luar)
+    if (activeTab === 'QUEUE') matchTab = [QueueStatus.BOOKED, QueueStatus.CHECKED_IN].includes(d.status);
+    // Tab INSIDE: Menampilkan yang sudah masuk (AT_GATE, CALLED, LOADING)
+    if (activeTab === 'INSIDE') matchTab = [QueueStatus.AT_GATE, QueueStatus.CALLED, QueueStatus.LOADING].includes(d.status);
+    // Tab HISTORY: Selesai atau Ditolak
+    if (activeTab === 'HISTORY') matchTab = [QueueStatus.COMPLETED, QueueStatus.EXITED, QueueStatus.REJECTED, QueueStatus.REJECTED_NEED_REBOOK].includes(d.status);
+    
+    // Pencarian Cepat
+    const searchLower = searchTerm.toLowerCase();
+    const matchSearch = 
+        (d.bookingCode && d.bookingCode.toLowerCase().includes(searchLower)) ||
+        d.licensePlate.toLowerCase().includes(searchLower) || 
+        d.name.toLowerCase().includes(searchLower) ||
+        d.company.toLowerCase().includes(searchLower);
+
+    return matchTab && matchSearch;
+  });
+
+  // Hitung Kapasitas
+  const trucksInside = drivers.filter(d => [QueueStatus.AT_GATE, QueueStatus.CALLED, QueueStatus.LOADING].includes(d.status)).length;
+  const maxCapacity = 20;
+
+  // Helper Durasi
+  const getDuration = (startTime?: number) => {
+      if (!startTime) return { hours: 0, text: '-' };
+      const diff = Date.now() - startTime;
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      return { hours, text: `${hours}j ${minutes}m` };
+  };
+
+  // --- LOGIC ACTION ---
+  
+  // 1. Handle Scan Kamera
+  const handleScanResult = (text: string) => {
+      if (text) {
+          setSearchTerm(text);
+          setShowScanner(false);
+          // Cari driver yang cocok
+          const found = drivers.find(d => d.bookingCode === text || d.licensePlate === text);
+          if (found) {
+              openInspection(found);
+          } else {
+              alert(`QR Code tidak ditemukan: ${text}`);
+          }
       }
   };
 
-  // Logic Simpan Revisi
-  const handleSaveRevision = async () => {
-      if(!scannedDriver) return;
-      await reviseAndCheckIn(scannedDriver.id, reviseForm);
-      alert('Data Direvisi & Check-in Berhasil ✅');
-      setScannedDriver(null);
-      setIsRevising(false);
-      setView('DASHBOARD');
-      fetchData();
+  // 2. Buka Modal Inspeksi & Siapkan Form Revisi
+  const openInspection = (driver: DriverData) => {
+      setInspectDriver(driver);
+      // Isi form revisi dengan data driver saat ini (Logika Asli)
+      setReviseForm({ name: driver.name, plate: driver.licensePlate, company: driver.company });
+      setIsRevising(false); 
+      setChecklist({ suratJalan: false, safetyShoes: false, vest: false, helmet: false, vehicleCondition: false });
   };
 
-  // Logic Approve Normal
-  const handleNormalApprove = async () => {
-      if(!scannedDriver) return;
-      // Gunakan data existing tanpa ubah
-      await reviseAndCheckIn(scannedDriver.id, {
-          name: scannedDriver.name,
-          plate: scannedDriver.licensePlate,
-          company: scannedDriver.company
-      });
-      alert('Check-in Berhasil ✅');
-      setScannedDriver(null);
-      setView('DASHBOARD');
-      fetchData();
+  // 3. Proses Masuk (Gabungan Logika Revisi + Checklist)
+  const handleApproveEntry = async () => {
+      if (!inspectDriver) return;
+      
+      // Validasi Checklist
+      const isComplete = Object.values(checklist).every(v => v === true);
+      if (!isComplete) {
+          alert("Harap ceklis semua item pemeriksaan keamanan sebelum mengizinkan masuk.");
+          return;
+      }
+
+      const confirmMsg = isRevising 
+        ? `Simpan REVISI data dan izinkan masuk?` 
+        : `Izinkan ${inspectDriver.licensePlate} masuk?`;
+
+      if (confirm(confirmMsg)) {
+          // PANGGIL FUNGSI ASLI BAPAK: reviseAndCheckIn
+          // Jika mode revisi, pakai data form. Jika tidak, pakai data asli.
+          await reviseAndCheckIn(inspectDriver.id, isRevising ? reviseForm : {
+              name: inspectDriver.name,
+              plate: inspectDriver.licensePlate,
+              company: inspectDriver.company
+          });
+          
+          setInspectDriver(null);
+          fetchData();
+      }
   };
 
-  // --- RENDER MODAL VERIFY (Fitur Utama Revisi Ada Disini) ---
-  if (view === 'VERIFY' && scannedDriver) {
-      return (
-          <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-              <div className="bg-white w-full max-w-md p-8 rounded-[2rem] shadow-2xl animate-fade-in-up">
+  // 4. Proses Keluar (Checkout)
+  const handleCheckout = async () => {
+      if (!inspectDriver) return;
+      if (confirm(`Konfirmasi ${inspectDriver.licensePlate} keluar area?`)) {
+          await checkoutDriver(inspectDriver.id);
+          setInspectDriver(null);
+          fetchData();
+      }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex flex-col">
+      {/* HEADER & STATS */}
+      <div className="bg-slate-900 text-white px-6 py-4 shadow-md sticky top-0 z-20">
+        <div className="flex justify-between items-center max-w-7xl mx-auto">
+            <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-800 rounded-lg border border-slate-700">
+                    <Shield className="w-6 h-6 text-emerald-400" />
+                </div>
+                <div>
+                    <h1 className="text-xl font-bold tracking-tight">Security Post</h1>
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <span>{currentUser?.name || 'Officer'}</span>
+                        <span className="text-emerald-400 font-mono text-[10px] border border-emerald-500/30 px-1 rounded">ONLINE</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+                {/* Counter Kapasitas */}
+                <div className={`px-4 py-2 rounded-xl border flex items-center gap-3 ${trucksInside >= maxCapacity ? 'bg-red-500/20 border-red-500 text-red-100' : 'bg-slate-800 border-slate-700'}`}>
+                    <div>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">Inside</p>
+                        <p className="text-lg font-bold font-mono">{trucksInside} <span className="text-slate-500 text-sm">/ {maxCapacity}</span></p>
+                    </div>
+                    <Truck className={`w-5 h-5 ${trucksInside >= maxCapacity ? 'text-red-400 animate-pulse' : 'text-blue-400'}`} />
+                </div>
+                <button onClick={onBack} className="p-2 bg-slate-800 rounded-full hover:bg-slate-700">
+                    <LogOut className="w-5 h-5 text-slate-400" />
+                </button>
+            </div>
+        </div>
+      </div>
+
+      <div className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-6 space-y-6">
+        
+        {/* CONTROLS (TABS, SEARCH, SCAN BUTTON) */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex p-1 bg-white rounded-xl shadow-sm border border-slate-200 w-full md:w-auto">
+                {['QUEUE', 'INSIDE', 'HISTORY'].map((tab) => (
+                    <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab as any)}
+                        className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                            activeTab === tab ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
+                        }`}
+                    >
+                        {tab === 'QUEUE' ? 'Masuk (Antrian)' : tab === 'INSIDE' ? 'Di Dalam (Keluar)' : 'Riwayat'}
+                    </button>
+                ))}
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="relative w-full md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input 
+                        type="text" 
+                        placeholder="Cari Plat / Kode / Nama..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"
+                    />
+                </div>
+                {/* Tombol Kamera */}
+                <button 
+                    onClick={() => setShowScanner(true)}
+                    className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 flex items-center gap-2 whitespace-nowrap"
+                >
+                    <QrCode className="w-5 h-5" /> <span className="hidden sm:inline">Scan QR</span>
+                </button>
+            </div>
+        </div>
+
+        {/* LIST CARD */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredDrivers.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-slate-400">
+                    <Filter className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                    <p>Tidak ada data ditemukan.</p>
+                </div>
+            ) : (
+                filteredDrivers.map(driver => {
+                    const duration = activeTab === 'INSIDE' ? getDuration(driver.checkInTime) : null;
+                    const isOverstay = duration && duration.hours >= 4;
+
+                    return (
+                        <div key={driver.id} className={`bg-white rounded-2xl p-5 border shadow-sm hover:shadow-md transition-all ${
+                            isOverstay ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-100'
+                        }`}>
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-800">{driver.licensePlate}</h3>
+                                    <p className="text-sm font-bold text-slate-500">{driver.company}</p>
+                                    {driver.bookingCode && <p className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded mt-1 inline-block font-mono text-slate-500">{driver.bookingCode}</p>}
+                                </div>
+                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                    driver.purpose === 'LOADING' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                                }`}>
+                                    {driver.purpose}
+                                </span>
+                            </div>
+
+                            {/* Indikator Durasi (Hanya di Tab Inside) */}
+                            {activeTab === 'INSIDE' && duration && (
+                                <div className={`flex items-center gap-2 mb-4 text-xs font-bold px-3 py-1.5 rounded-lg w-fit ${
+                                    isOverstay ? 'bg-red-50 text-red-600' : 
+                                    duration.hours >= 2 ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-600'
+                                }`}>
+                                    <Clock className="w-3 h-3" />
+                                    <span>Durasi: {duration.text}</span>
+                                </div>
+                            )}
+
+                            <div className="flex items-center gap-2 text-xs text-slate-400 mb-4 bg-slate-50 p-2 rounded-lg">
+                                <span className="font-bold text-slate-600">DRIVER:</span> {driver.name}
+                            </div>
+
+                            {/* Tombol Aksi */}
+                            <button 
+                                onClick={() => openInspection(driver)}
+                                className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 flex items-center justify-center gap-2"
+                            >
+                                {activeTab === 'INSIDE' ? 'Checkout / Keluar' : 'Proses Masuk'} <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    );
+                })
+            )}
+        </div>
+      </div>
+
+      {/* --- MODAL UTAMA (INSPEKSI + REVISI + CHECKLIST) --- */}
+      {inspectDriver && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in-up">
+              <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
                   
-                  {isRevising ? (
-                      /* TAMPILAN MODE REVISI */
-                      <div className="space-y-4">
-                          <div className="flex items-center gap-2 mb-2">
-                              <Edit2 className="w-6 h-6 text-blue-600"/>
-                              <h2 className="text-2xl font-black text-slate-800">Revisi Data</h2>
-                          </div>
-                          
-                          <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase">Plat Nomor</label>
-                              <input 
-                                  value={reviseForm.plate}
-                                  onChange={e => setReviseForm({...reviseForm, plate: e.target.value.toUpperCase()})}
-                                  className="w-full p-3 border-2 border-slate-200 rounded-xl font-black text-xl uppercase"
-                              />
-                          </div>
-                          <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase">Nama Driver</label>
-                              <input 
-                                  value={reviseForm.name}
-                                  onChange={e => setReviseForm({...reviseForm, name: e.target.value})}
-                                  className="w-full p-3 border-2 border-slate-200 rounded-xl font-bold"
-                              />
-                          </div>
-
-                          <div className="flex gap-2 mt-6">
-                              <button onClick={() => setIsRevising(false)} className="flex-1 py-3 bg-slate-100 font-bold rounded-xl text-slate-500">Batal</button>
-                              <button onClick={handleSaveRevision} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">Simpan & Masuk</button>
-                          </div>
+                  {/* Header Modal */}
+                  <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                      <div>
+                          <h2 className="text-lg font-bold">{isRevising ? 'Revisi Data' : `Pemeriksaan ${activeTab === 'INSIDE' ? 'Keluar' : 'Masuk'}`}</h2>
+                          {!isRevising && <p className="text-slate-400 text-sm">{inspectDriver.licensePlate} • {inspectDriver.company}</p>}
                       </div>
-                  ) : (
-                      /* TAMPILAN MODE NORMAL */
-                      <div className="text-center">
-                          <h2 className="text-4xl font-black text-slate-800 mb-2 uppercase">{scannedDriver.licensePlate}</h2>
-                          <p className="text-lg font-bold text-slate-600">{scannedDriver.name}</p>
-                          <p className="text-sm text-slate-400 mb-8">{scannedDriver.company}</p>
+                      <button onClick={() => setInspectDriver(null)} className="p-2 bg-white/10 rounded-full hover:bg-white/20">
+                          <XCircle className="w-6 h-6" />
+                      </button>
+                  </div>
 
-                          <div className="space-y-3">
-                              <button 
-                                  onClick={handleNormalApprove}
-                                  className="w-full py-4 bg-emerald-500 text-white font-bold rounded-2xl shadow-lg hover:bg-emerald-600 transition-all flex justify-center items-center gap-2"
-                              >
-                                  <CheckCircle className="w-5 h-5"/> IZINKAN MASUK (Sesuai)
-                              </button>
-                              
-                              <button 
-                                  onClick={async () => {
-                                      const reason = prompt("Alasan Tolak (Booking Ulang):");
-                                      if(reason) {
-                                          await rejectGate(scannedDriver.id, reason);
-                                          setView('DASHBOARD');
-                                          fetchData();
-                                      }
-                                  }}
-                                  className="w-full py-4 bg-white border-2 border-red-100 text-red-500 font-bold rounded-2xl hover:bg-red-50 transition-all flex justify-center items-center gap-2"
-                              >
-                                  <XCircle className="w-5 h-5"/> TOLAK (Booking Ulang)
-                              </button>
+                  <div className="p-6 overflow-y-auto">
+                      
+                      {/* --- FORM REVISI (Fitur Lama Bapak) --- */}
+                      {isRevising ? (
+                          <div className="space-y-4 animate-fade-in-up">
+                              <div>
+                                  <label className="text-xs font-bold text-slate-400 uppercase">Plat Nomor</label>
+                                  <input 
+                                      value={reviseForm.plate}
+                                      onChange={e => setReviseForm({...reviseForm, plate: e.target.value.toUpperCase()})}
+                                      className="w-full p-3 border-2 border-slate-200 rounded-xl font-black text-xl uppercase"
+                                  />
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-400 uppercase">Nama Driver</label>
+                                  <input 
+                                      value={reviseForm.name}
+                                      onChange={e => setReviseForm({...reviseForm, name: e.target.value})}
+                                      className="w-full p-3 border-2 border-slate-200 rounded-xl font-bold"
+                                  />
+                              </div>
+                              <div className="p-3 bg-blue-50 text-blue-700 text-xs rounded-lg font-medium">
+                                  *Data akan diperbarui setelah Anda klik tombol "Simpan & Masuk" di bawah.
+                              </div>
+                              <button onClick={() => setIsRevising(false)} className="text-sm text-slate-400 underline w-full text-center">Batal Revisi</button>
                           </div>
+                      ) : (
+                          /* --- TAMPILAN NORMAL (CHECKLIST) --- */
+                          <>
+                              {/* Tombol Masuk Mode Revisi (Hanya saat Masuk) */}
+                              {activeTab === 'QUEUE' && (
+                                <div className="mb-6 flex justify-end">
+                                    <button 
+                                        onClick={() => setIsRevising(true)}
+                                        className="text-blue-600 text-xs font-bold flex items-center gap-1 hover:underline bg-blue-50 px-3 py-1.5 rounded-lg"
+                                    >
+                                        <Edit2 className="w-3 h-3" /> Data Salah? Klik Revisi
+                                    </button>
+                                </div>
+                              )}
 
-                          <div className="mt-8 pt-6 border-t border-slate-100">
-                              <button 
-                                  onClick={() => {
-                                      setReviseForm({
-                                          name: scannedDriver.name,
-                                          plate: scannedDriver.licensePlate,
-                                          company: scannedDriver.company
-                                      });
-                                      setIsRevising(true);
-                                  }}
-                                  className="text-slate-400 font-bold text-sm flex items-center justify-center gap-2 hover:text-blue-600 transition-colors"
-                              >
-                                  <Edit2 className="w-4 h-4"/>
-                                  Data Salah? Klik Revisi Disini
-                              </button>
-                          </div>
-                      </div>
-                  )}
+                              {/* Alert Overstay (Hanya saat Keluar) */}
+                              {activeTab === 'INSIDE' && getDuration(inspectDriver.checkInTime).hours >= 4 && (
+                                  <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
+                                      <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                                      <div>
+                                          <h4 className="font-bold text-red-700 text-sm">Peringatan Overstay!</h4>
+                                          <p className="text-xs text-red-600 mt-1">Kendaraan ini berada di dalam lebih dari 4 jam.</p>
+                                      </div>
+                                  </div>
+                              )}
+
+                              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest mb-4">Checklist Keamanan</h3>
+                              <div className="space-y-3">
+                                  {[
+                                      { id: 'suratJalan', label: 'Surat Jalan / DO Sesuai' },
+                                      { id: 'safetyShoes', label: 'Menggunakan Sepatu Safety' },
+                                      { id: 'vest', label: 'Menggunakan Rompi (Vest)' },
+                                      { id: 'helmet', label: 'Menggunakan Helm Proyek' },
+                                      { id: 'vehicleCondition', label: 'Kondisi Kendaraan Baik' },
+                                  ].map(item => (
+                                      <label key={item.id} className="flex items-center gap-4 p-4 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                                          <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
+                                              checklist[item.id as keyof typeof checklist] ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'
+                                          }`}>
+                                              {checklist[item.id as keyof typeof checklist] && <CheckSquare className="w-4 h-4 text-white" />}
+                                          </div>
+                                          <input 
+                                              type="checkbox" 
+                                              className="hidden"
+                                              checked={checklist[item.id as keyof typeof checklist]} 
+                                              onChange={() => setChecklist(prev => ({ ...prev, [item.id]: !prev[item.id as keyof typeof checklist] }))}
+                                          />
+                                          <span className="font-bold text-slate-700 text-sm">{item.label}</span>
+                                      </label>
+                                  ))}
+                              </div>
+                          </>
+                      )}
+                  </div>
+
+                  {/* Footer Modal */}
+                  <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0 space-y-3">
+                      <button 
+                          onClick={activeTab === 'INSIDE' ? handleCheckout : handleApproveEntry}
+                          className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 ${
+                              (Object.values(checklist).every(Boolean) || activeTab === 'INSIDE') 
+                              ? activeTab === 'INSIDE' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                              : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                          }`}
+                          disabled={activeTab === 'QUEUE' && !Object.values(checklist).every(Boolean)}
+                      >
+                          {activeTab === 'INSIDE' ? 'IZINKAN KELUAR (CHECKOUT)' : isRevising ? 'SIMPAN REVISI & MASUK' : 'IZINKAN MASUK (APPROVE)'}
+                      </button>
+                      
+                      {activeTab === 'QUEUE' && !isRevising && (
+                          <button 
+                              onClick={async () => {
+                                  const reason = prompt("Alasan penolakan di Gate:");
+                                  if(reason) {
+                                      await rejectGate(inspectDriver.id, reason);
+                                      setInspectDriver(null);
+                                      fetchData();
+                                  }
+                              }}
+                              className="w-full py-3 bg-white border border-red-200 text-red-600 rounded-xl font-bold hover:bg-red-50"
+                          >
+                              TOLAK DI GATE
+                          </button>
+                      )}
+                  </div>
               </div>
           </div>
-      );
-  }
+      )}
 
-  // --- RENDER DASHBOARD UTAMA (List Antrian & Checkout) ---
-  return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-       <div className="flex justify-between items-center bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-           <div>
-               <h1 className="text-2xl font-black text-slate-800">Security Gate</h1>
-               <p className="text-slate-500">Pos Penjagaan Masuk & Keluar</p>
-           </div>
-           
-           {/* Simulasi Input Scan */}
-           <div className="flex gap-2">
-               <input 
-                  type="text" 
-                  placeholder="Simulasi Scan QR (Booking Code)" 
-                  className="p-3 border rounded-xl"
-                  id="scanInput"
-               />
-               <button 
-                  onClick={() => {
-                      const val = (document.getElementById('scanInput') as HTMLInputElement).value;
-                      handleSimulateScan(val);
-                  }}
-                  className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl"
-               >
-                   SCAN
-               </button>
-           </div>
-       </div>
+      {/* --- MODAL KAMERA SCANNER --- */}
+      {showScanner && (
+        <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center">
+            <div className="absolute top-6 right-6 z-10">
+                <button onClick={() => setShowScanner(false)} className="p-3 bg-white/20 rounded-full text-white backdrop-blur-md">
+                    <XCircle className="w-8 h-8" />
+                </button>
+            </div>
+            
+            <div className="w-full max-w-md aspect-square bg-black relative rounded-3xl overflow-hidden border-2 border-slate-700">
+                <Scanner 
+                    onResult={handleScanResult}
+                    onError={(error) => console.log(error?.message)}
+                    options={{ delayBetweenScanAttempts: 500, constraints: { facingMode: 'environment' } }}
+                />
+                
+                {/* Overlay Garis Scan */}
+                <div className="absolute inset-0 border-[40px] border-black/50 flex items-center justify-center pointer-events-none">
+                    <div className="w-64 h-64 border-4 border-emerald-500/50 rounded-3xl relative animate-pulse">
+                         <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-red-500 shadow-[0_0_10px_rgba(255,0,0,0.8)]"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <p className="text-white mt-8 font-bold text-center px-6">
+                Arahkan kamera ke QR Code Tiket Driver. <br/>
+                <span className="text-sm text-slate-400 font-normal">Pastikan cahaya cukup terang.</span>
+            </p>
+        </div>
+      )}
 
-       {/* List Kendaraan Keluar (Checkout) */}
-       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-           <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-               <LogOut className="w-5 h-5"/> Siap Keluar (Checkout)
-           </h3>
-           <div className="space-y-2">
-               {drivers.filter(d => d.status === QueueStatus.COMPLETED).map(d => (
-                   <div key={d.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                       <div>
-                           <div className="font-black text-slate-800">{d.licensePlate}</div>
-                           <div className="text-xs text-slate-500">{d.name}</div>
-                       </div>
-                       <button 
-                          onClick={async () => {
-                              if(confirm('Konfirmasi kendaraan keluar?')) {
-                                  await checkoutDriver(d.id);
-                                  fetchData();
-                              }
-                          }}
-                          className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-lg hover:bg-slate-900"
-                       >
-                           KELUAR
-                       </button>
-                   </div>
-               ))}
-               {drivers.filter(d => d.status === QueueStatus.COMPLETED).length === 0 && (
-                   <p className="text-sm text-slate-400 italic">Tidak ada kendaraan yang siap keluar.</p>
-               )}
-           </div>
-       </div>
     </div>
   );
 };
