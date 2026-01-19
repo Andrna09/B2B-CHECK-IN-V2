@@ -88,7 +88,6 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
 
 // --- FUNGSI APPROVE BOOKING (UPDATE: LINK WA OTOMATIS) ---
 export const approveBooking = async (id: string): Promise<boolean> => {
-    // 1. Ambil data driver
     const { data: driver, error: fetchError } = await supabase
         .from('drivers')
         .select('purpose, name, phone')
@@ -97,7 +96,6 @@ export const approveBooking = async (id: string): Promise<boolean> => {
 
     if (fetchError || !driver) return false;
 
-    // 2. Generate Kode Booking (SOC-...)
     const year = new Date().getFullYear();
     const type = driver.purpose === 'UNLOADING' ? 'IN' : 'OUT';
     const prefix = `SOC-${type}-${year}-`;
@@ -120,18 +118,14 @@ export const approveBooking = async (id: string): Promise<boolean> => {
     const sequenceStr = sequence.toString().padStart(8, '0');
     const finalCode = `${prefix}${sequenceStr}`;
 
-    // 3. Update ke Database
     const { error } = await supabase.from('drivers').update({
         status: QueueStatus.BOOKED,
         booking_code: finalCode,
         admin_notes: `Approved manually. Code: ${finalCode}`
     }).eq('id', id);
 
-    // 4. Kirim WA (DENGAN LINK DOWNLOAD OTOMATIS)
     if (!error) {
         if (driver.phone) {
-             // 🔥 LINK KHUSUS UNTUK MEMBUKA TIKET 🔥
-             // window.location.origin akan mengambil URL website Anda saat ini
              const appUrl = `${window.location.origin}?ticket_id=${id}`;
              
              const msg = `*TIKET ANDA SUDAH TERBIT!* ✅\n\n` +
@@ -337,4 +331,29 @@ export const getDevConfig = (): DevConfig => {
 
 export const saveDevConfig = (config: DevConfig): void => {
     localStorage.setItem('DEV_CONFIG', JSON.stringify(config));
+};
+
+// 🔥 [BARU] FUNGSI RESEND NOTIFIKASI 🔥
+export const resendBookingNotification = async (id: string): Promise<boolean> => {
+    const { data: driver, error } = await supabase
+        .from('drivers')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+    if (error || !driver || !driver.booking_code) return false;
+
+    if (driver.phone) {
+         const appUrl = `${window.location.origin}?ticket_id=${id}`;
+         
+         const msg = `*PENGIRIMAN ULANG TIKET* 🔄\n\n` +
+                     `Halo ${driver.name},\n` +
+                     `Kode Booking: *${driver.booking_code}*\n\n` +
+                     `👇 *KLIK LINK UNTUK DOWNLOAD TIKET:* 👇\n` +
+                     `${appUrl}\n\n` + 
+                     `Simpan pesan ini baik-baik ya.`;
+
+         return await sendWhatsAppNotification(driver.phone, msg);
+    }
+    return false;
 };
