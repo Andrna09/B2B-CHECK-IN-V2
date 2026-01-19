@@ -1,4 +1,3 @@
-//
 import { supabase } from './supabaseClient';
 import { DriverData, QueueStatus, GateConfig, UserProfile, DivisionConfig } from '../types';
 
@@ -34,32 +33,22 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
   purpose: dbData.purpose,
   entryType: dbData.entry_type,
   status: dbData.status as QueueStatus,
-  
-  // Waktu
   checkInTime: dbData.check_in_time,
   verifiedTime: dbData.verified_time,
   calledTime: dbData.called_time,
   loadingStartTime: dbData.loading_start_time,
   completedTime: dbData.end_time,
   exitTime: dbData.exit_time,
-  
-  // Data Booking (KOLOM BARU)
   bookingCode: dbData.booking_code,
   poNumber: dbData.po_number,
   visitDate: dbData.visit_date,
   slotTime: dbData.slot_time,
-  
-  // Posisi & Antrian
   gate: dbData.gate,
   queueNumber: dbData.queue_number,
-  
-  // Dokumen
   documentUrl: dbData.document_file,
   notes: dbData.notes,
   photoBeforeUrl: dbData.photo_before_urls,
   photoAfterUrl: dbData.photo_after_urls,
-  
-  // Notes
   rejectionReason: dbData.rejection_reason,
   adminNotes: dbData.admin_notes,
   securityNotes: dbData.security_notes
@@ -70,7 +59,6 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
 // ============================================================================
 
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
-  // Mapping Aplikasi -> Database (Payload)
   const payload: any = {
       name: data.name,
       license_plate: data.licensePlate,
@@ -81,12 +69,9 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
       entry_type: 'BOOKING',
       check_in_time: Date.now(),
       document_file: docFile || '',
-      
-      // MENYIMPAN KE KOLOM BARU (PENTING!)
       po_number: data.poNumber,
       visit_date: data.visitDate,
       slot_time: data.slotTime,
-      
       notes: data.notes,
       admin_notes: data.adminNotes
   };
@@ -101,65 +86,61 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
   return insertedData ? mapDatabaseToDriver(insertedData) : null;
 };
 
-// --- FUNGSI APPROVE BOOKING (LOGIC BARU: SEQUENTIAL) ---
+// --- FUNGSI APPROVE BOOKING (UPDATE: LINK WA OTOMATIS) ---
 export const approveBooking = async (id: string): Promise<boolean> => {
-    // 1. Ambil data driver dulu untuk cek Purpose (Bongkar/Muat) & Nama/Phone
+    // 1. Ambil data driver
     const { data: driver, error: fetchError } = await supabase
         .from('drivers')
         .select('purpose, name, phone')
         .eq('id', id)
         .single();
 
-    if (fetchError || !driver) {
-        console.error("Error fetching driver data:", fetchError);
-        return false;
-    }
+    if (fetchError || !driver) return false;
 
-    // 2. Tentukan Prefix berdasarkan Logic Baru
-    // Format: SOC-[TIPE]-[TAHUN]-
-    const year = new Date().getFullYear(); // Contoh: 2026
+    // 2. Generate Kode Booking (SOC-...)
+    const year = new Date().getFullYear();
     const type = driver.purpose === 'UNLOADING' ? 'IN' : 'OUT';
-    const prefix = `SOC-${type}-${year}-`; // Contoh: SOC-IN-2026-
+    const prefix = `SOC-${type}-${year}-`;
 
-    // 3. Cari nomor urut terakhir di database berdasarkan prefix tersebut
-    // Kita cari booking_code yang diawali dengan prefix ini, urutkan descending (terbesar)
     const { data: latestEntry } = await supabase
         .from('drivers')
         .select('booking_code')
-        .ilike('booking_code', `${prefix}%`) // Filter SOC-IN-2026-%
+        .ilike('booking_code', `${prefix}%`)
         .order('booking_code', { ascending: false })
         .limit(1)
         .single();
 
-    // 4. Hitung Sequence (Auto Increment)
-    let sequence = 1; // Default mulai dari 1
+    let sequence = 1;
     if (latestEntry && latestEntry.booking_code) {
-        // Ambil bagian angka terakhir (8 digit)
         const parts = latestEntry.booking_code.split('-');
-        const lastNumStr = parts[parts.length - 1]; // "00000001"
-        const lastNum = parseInt(lastNumStr, 10);
-        
-        if (!isNaN(lastNum)) {
-            sequence = lastNum + 1;
-        }
+        const lastNumStr = parts[parts.length - 1];
+        if (!isNaN(parseInt(lastNumStr))) sequence = parseInt(lastNumStr) + 1;
     }
 
-    // 5. Format Kode Final (Padding 8 Digit)
-    // Contoh: 1 -> "00000001"
     const sequenceStr = sequence.toString().padStart(8, '0');
-    const finalCode = `${prefix}${sequenceStr}`; // SOC-IN-2026-00000001
+    const finalCode = `${prefix}${sequenceStr}`;
 
-    // 6. Update Database
+    // 3. Update ke Database
     const { error } = await supabase.from('drivers').update({
         status: QueueStatus.BOOKED,
         booking_code: finalCode,
-        admin_notes: `Approved manually by Admin. Code: ${finalCode}`
+        admin_notes: `Approved manually. Code: ${finalCode}`
     }).eq('id', id);
 
-    // 7. Kirim Notifikasi WA (Jika sukses update)
+    // 4. Kirim WA (DENGAN LINK DOWNLOAD OTOMATIS)
     if (!error) {
         if (driver.phone) {
-             const msg = `*KONFIRMASI BOOKING BERHASIL*\n\nHalo ${driver.name},\nKode Booking: *${finalCode}*\n\nSilakan tunjukkan pesan ini ke Security saat tiba di lokasi.`;
+             // 🔥 LINK KHUSUS UNTUK MEMBUKA TIKET 🔥
+             // window.location.origin akan mengambil URL website Anda saat ini
+             const appUrl = `${window.location.origin}?ticket_id=${id}`;
+             
+             const msg = `*TIKET ANDA SUDAH TERBIT!* ✅\n\n` +
+                         `Halo ${driver.name},\n` +
+                         `Kode Booking: *${finalCode}*\n\n` +
+                         `👇 *KLIK LINK UNTUK DOWNLOAD TIKET:* 👇\n` +
+                         `${appUrl}\n\n` + 
+                         `⚠️ *PENTING:* Simpan gambar tiket di HP Anda untuk ditunjukkan ke Security.`;
+
              await sendWhatsAppNotification(driver.phone, msg);
         }
     }
@@ -240,56 +221,24 @@ export const checkoutDriver = async (id: string): Promise<void> => {
 };
 
 // ============================================================================
-// 2. AUTHENTICATION FUNCTIONS (SUDAH FIX)
+// 2. AUTHENTICATION FUNCTIONS
 // ============================================================================
 
 export const verifyDivisionCredential = async (divId: string, password: string): Promise<DivisionConfig | null> => {
-    // 1. Cek apakah divisi ada di system_settings
-    const { data } = await supabase
-        .from('system_settings')
-        .select('*')
-        .eq('category', 'DIVISION')
-        .eq('value', divId)
-        .single();
-    
+    const { data } = await supabase.from('system_settings').select('*').eq('category', 'DIVISION').eq('value', divId).single();
     if (!data) return null;
-
-    // 2. Logic Role Dinamis (ADMIN vs SECURITY vs MANAGER)
     let role: 'SECURITY' | 'ADMIN' | 'MANAGER' = 'SECURITY';
     if (divId.includes('ADMIN')) role = 'ADMIN';
     if (divId.includes('MANAGER')) role = 'MANAGER';
-
-    return {
-        id: data.value,
-        name: data.label,
-        role: role, 
-        theme: 'blue',
-        password: '***' 
-    };
+    return { id: data.value, name: data.label, role: role, theme: 'blue', password: '***' };
 };
 
 export const loginSystem = async (userId: string, pin: string): Promise<UserProfile | null> => {
-    // Cek user di tabel regular_drivers
-    const { data } = await supabase
-        .from('regular_drivers')
-        .select('*')
-        .eq('id', userId)
-        // .eq('pin_code', pin) // Uncomment jika ingin validasi PIN ketat
-        .single();
-
+    const { data } = await supabase.from('regular_drivers').select('*').eq('id', userId).single();
     if (data) {
-        // Logic Role User: Ambil dari kolom 'phone' (sesuai script SQL reset)
         let userRole: any = 'SECURITY';
-        if (data.phone === 'ADMIN' || data.phone === 'MANAGER') {
-             userRole = data.phone;
-        }
-
-        return {
-            id: data.id,
-            name: data.name,
-            role: userRole, 
-            status: 'ACTIVE'
-        } as UserProfile;
+        if (data.phone === 'ADMIN' || data.phone === 'MANAGER') { userRole = data.phone; }
+        return { id: data.id, name: data.name, role: userRole, status: 'ACTIVE' } as UserProfile;
     }
     return null;
 };
@@ -298,7 +247,6 @@ export const loginSystem = async (userId: string, pin: string): Promise<UserProf
 // 3. SYSTEM / ADMIN FUNCTIONS
 // ============================================================================
 
-// --- GATE CONFIGS ---
 export const getGateConfigs = async (): Promise<GateConfig[]> => {
   const { data, error } = await supabase.from('gate_configs').select('*').order('name', { ascending: true });
   if (error) return [];
@@ -310,7 +258,6 @@ export const saveGateConfig = async (config: Partial<GateConfig>): Promise<boole
   return !error;
 };
 
-// --- PROFILES (USERS) ---
 export const getProfiles = async (): Promise<UserProfile[]> => {
   const { data } = await supabase.from('regular_drivers').select('*');
   return (data as any) || [];
@@ -318,19 +265,13 @@ export const getProfiles = async (): Promise<UserProfile[]> => {
 
 export const addProfile = async (profile: UserProfile): Promise<boolean> => {
   const { error } = await supabase.from('regular_drivers').insert([{
-      id: profile.id,
-      name: profile.name,
-      license_plate: 'STAFF', 
-      phone: profile.role // Simpan role di phone
+      id: profile.id, name: profile.name, license_plate: 'STAFF', phone: profile.role
   }]);
   return !error;
 };
 
 export const updateProfile = async (profile: UserProfile): Promise<boolean> => {
-  const { error } = await supabase.from('regular_drivers').update({
-      name: profile.name,
-      phone: profile.role
-  }).eq('id', profile.id);
+  const { error } = await supabase.from('regular_drivers').update({ name: profile.name, phone: profile.role }).eq('id', profile.id);
   return !error;
 };
 
@@ -339,24 +280,15 @@ export const deleteProfile = async (id: string): Promise<boolean> => {
   return !error;
 };
 
-// --- DIVISIONS ---
 export const getDivisions = async (): Promise<DivisionConfig[]> => {
     const { data } = await supabase.from('system_settings').select('*').eq('category', 'DIVISION');
     return (data || []).map((d: any) => ({
-        id: d.value,
-        name: d.label,
-        role: d.value === 'ADMIN' ? 'ADMIN' : d.value === 'MANAGER' ? 'MANAGER' : 'SECURITY',
-        theme: 'blue',
-        password: '***' 
+        id: d.value, name: d.label, role: d.value === 'ADMIN' ? 'ADMIN' : d.value === 'MANAGER' ? 'MANAGER' : 'SECURITY', theme: 'blue', password: '***' 
     })) as DivisionConfig[];
 };
 
 export const saveDivision = async (div: DivisionConfig): Promise<boolean> => {
-    const { error } = await supabase.from('system_settings').insert([{ 
-        category: 'DIVISION', 
-        value: div.id, 
-        label: div.name 
-    }]);
+    const { error } = await supabase.from('system_settings').insert([{ category: 'DIVISION', value: div.id, label: div.name }]);
     return !error;
 };
 
@@ -370,7 +302,6 @@ export const deleteSystemSetting = async (id: string): Promise<boolean> => {
     return !error;
 };
 
-// --- LOGS & UTILS ---
 export const getActivityLogs = async (): Promise<any[]> => {
   const { data } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(50);
   return data || [];
