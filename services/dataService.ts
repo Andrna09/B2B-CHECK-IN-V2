@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { DriverData, QueueStatus, GateConfig, UserProfile, DivisionConfig } from '../types';
 
+// --- HELPER WA ---
 const sendWhatsAppNotification = async (target: string, message: string): Promise<boolean> => {
   try {
     const response = await fetch('/api/whatsapp', {
@@ -45,6 +46,8 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
   adminNotes: dbData.admin_notes,
   securityNotes: dbData.security_notes
 });
+
+// --- CORE FUNCTIONS ---
 
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
   const payload: any = {
@@ -108,7 +111,7 @@ export const rejectBooking = async (id: string, reason: string): Promise<boolean
     return !error;
 };
 
-// 🔥 FUNGSI UTAMA: REVISI + LOG + WA LINK BARU 🔥
+// 🔥 FUNGSI REVISI + LOG + WA LINK BARU 🔥
 export const reviseAndCheckIn = async (
     id: string, 
     revisedData: { name: string, plate: string, company: string, phone?: string, purpose?: string }
@@ -186,7 +189,7 @@ export const checkoutDriver = async (id: string): Promise<void> => {
     if(data?.phone) await sendWhatsAppNotification(data.phone, `EXIT PASS.\nTerima kasih, hati-hati di jalan.`);
 };
 
-// Bagian Login & System (Tetap sama, tidak perlu diubah)
+// --- SYSTEM & AUTH ---
 export const verifyDivisionCredential = async (divId: string, password: string): Promise<DivisionConfig | null> => {
     const { data } = await supabase.from('system_settings').select('*').eq('category', 'DIVISION').eq('value', divId).single();
     if (!data) return null;
@@ -277,4 +280,19 @@ export const resendBookingNotification = async (id: string): Promise<boolean> =>
          return await sendWhatsAppNotification(driver.phone, msg);
     }
     return false;
+};
+
+// 🔥 BAGIAN YANG TADI HILANG (DEV CONFIG) 🔥
+export interface DevConfig {
+  enableGpsBypass: boolean;
+  enableMockOCR: boolean;
+}
+
+export const getDevConfig = (): DevConfig => {
+    const stored = localStorage.getItem('DEV_CONFIG');
+    return stored ? JSON.parse(stored) : { enableGpsBypass: false, enableMockOCR: false };
+};
+
+export const saveDevConfig = (config: DevConfig): void => {
+    localStorage.setItem('DEV_CONFIG', JSON.stringify(config));
 };
