@@ -13,7 +13,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "@vercel/node": "^2.15.9",
-    "@yudiel/react-qr-scanner": "^2.1.0", 
+    "@yudiel/react-qr-scanner": "^2.1.0",
     "buffer": "^6.0.3",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
