@@ -18,13 +18,14 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
     setIsGenerating(true);
 
     try {
-      // Tunggu render font dan style
+      // Tunggu render font dan style stabil
       await new Promise(resolve => setTimeout(resolve, 500));
 
       const canvas = await html2canvas(ticketRef.current, {
         scale: 2, // High resolution
         backgroundColor: null,
-        useCORS: true,
+        useCORS: true,      // Wajib untuk gambar
+        allowTaint: true,   // Izinkan memotret gambar lokal
         logging: false
       });
 
@@ -71,7 +72,13 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
                 <div className="flex justify-between items-center relative z-10 mb-6">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center p-1">
-                             <img src="https://play-lh.googleusercontent.com/J0NYr2cNJmhQiGbDXJHOqa4o9WhPeqC4BGuaD-YKp28KxH1xoW83A3dJyQMsaNwpx0Pv" className="w-full h-full object-cover rounded" onError={(e) => e.currentTarget.style.display = 'none'}/>
+                             {/* 🔥 UPDATE: MENGGUNAKAN LOGO LOKAL (PASTIKAN FILE Logo.png ADA DI FOLDER PUBLIC) 🔥 */}
+                             <img 
+                                src="/Logo.png" 
+                                className="w-full h-full object-contain" 
+                                alt="Sociolla"
+                                onError={(e) => e.currentTarget.style.display = 'none'}
+                             />
                         </div>
                         <div>
                             <h3 className="font-serif font-bold text-lg leading-none">sociolla</h3>
@@ -129,7 +136,7 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
                     <div className="p-3 bg-white border-4 border-[#FDF2F4] rounded-2xl shadow-sm">
                         <QRCodeSVG value={data.bookingCode} size={160} />
                     </div>
-                    {/* UPDATED: Ukuran font dikecilkan agar muat satu baris */}
+                    {/* Ukuran font disesuaikan agar rapi */}
                     <p className="mt-4 font-mono font-bold text-lg sm:text-xl tracking-widest text-slate-700 text-center break-all">
                         {data.bookingCode}
                     </p>
