@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout'; 
 import DriverCheckIn from './components/DriverCheckIn';
 import DriverStatus from './components/DriverStatus';
@@ -12,7 +12,7 @@ import SystemOverview from './components/SystemOverview';
 import { ArrowRight, Activity, Lock, Info } from 'lucide-react';
 import { UserProfile } from './types';
 
-// --- OPTIMIZATION: Landing Page dipisah agar tidak re-render berat ---
+// --- LANDING PAGE ---
 interface LandingPageProps {
   onNavigate: (view: string) => void;
 }
@@ -50,7 +50,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => (
       </div>
       <div className="hidden lg:block lg:col-span-7 relative h-[600px]">
         <div className="relative w-full h-full rounded-[3rem] overflow-hidden border-[6px] border-white shadow-2xl">
-           <img src="https://lh3.googleusercontent.com/gps-cs-s/AG0ilSyUnU3OugVJpRf26RWFVCuVaFLhm_b6RKgTqLCDJdQyybIi9U5jNGoFoF1jrRWtWJmggqd9VZm5kUwbTdKH1AG22qGrImduifg6Msj1iSgTXpqdBH0OSmX8BYhsdTZp9riWEPeDHw=s680-w680-h510-rw" alt="Sociolla Warehouse" className="w-full h-full object-cover"/>
+           <img src="https://play-lh.googleusercontent.com/J0NYr2cNJmhQiGbDXJHOqa4o9WhPeqC4BGuaD-YKp28KxH1xoW83A3dJyQMsaNwpx0Pv" alt="Sociolla Warehouse" className="w-full h-full object-cover"/>
            <div className="absolute bottom-8 left-8 bg-white/90 backdrop-blur-xl p-5 rounded-3xl shadow-lg max-w-xs border border-white/50">
              <h3 className="font-serif font-bold text-slate-900 text-lg">PT Social Bella Indonesia</h3>
              <p className="text-[10px] font-bold text-pink-500 uppercase tracking-widest mt-0.5">Secure Integrated System</p>
@@ -70,6 +70,27 @@ const App: React.FC = () => {
   // Transition State
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionRole, setTransitionRole] = useState<'ADMIN' | 'SECURITY' | 'MANAGER' | null>(null);
+
+  // ============================================================
+  // 🔥 [KODE BARU] LOGIKA BACA LINK WA (DEEP LINK) 🔥
+  // ============================================================
+  useEffect(() => {
+    // 1. Cek Link: Apakah ada ?ticket_id=... ?
+    const params = new URLSearchParams(window.location.search);
+    const ticketId = params.get('ticket_id');
+    
+    if (ticketId) {
+       console.log("🚀 Link WA Terdeteksi! Membuka Tiket ID:", ticketId);
+       
+       // 2. Set ID Driver & Paksa Masuk Halaman Status
+       setCurrentDriverId(ticketId);
+       setView('status');
+       
+       // 3. Bersihkan URL browser agar rapi (Opsional)
+       window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+  // ============================================================
 
   const handleCheckInSuccess = (id: string) => {
     setCurrentDriverId(id);
@@ -132,10 +153,9 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Home / Landing Page */}
-        {(view === 'home') && <LandingPage onNavigate={setView} />}
-
         {/* Logic Render Utama */}
+        {view === 'home' && <LandingPage onNavigate={setView} />}
+
         {view !== 'home' && view !== 'login' && (
             isAdminView ? (
               <Layout userRole="ADMIN" onLogout={handleLogout}>
