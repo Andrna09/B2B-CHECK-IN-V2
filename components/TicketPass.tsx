@@ -13,15 +13,13 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
   const ticketRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // 🔥 LOGIKA HYBRID: Cek Status Driver 🔥
-  // Jika statusnya CHECKED_IN, CALLED, LOADING, atau COMPLETED -> Berarti TIKET ANTRIAN (HIJAU)
+  // LOGIKA HYBRID: Jika status CHECKED_IN, CALLED, LOADING, COMPLETED -> TIKET HIJAU
   const isCheckedIn = [QueueStatus.CHECKED_IN, QueueStatus.CALLED, QueueStatus.LOADING, QueueStatus.COMPLETED].includes(data.status);
   
-  // Konfigurasi Tampilan (Dinamis)
   const ticketTitle = isCheckedIn ? 'QUEUE TICKET' : 'OFFICIAL ENTRY PASS';
   const ticketType = isCheckedIn ? 'CHECKED-IN / INSIDE' : (data.entryType === 'BOOKING' ? 'PRE-BOOKED' : 'DIRECT ENTRY');
-  const accentColor = isCheckedIn ? '#10B981' : '#D46A83'; // Hijau vs Pink
-  const accentBg = isCheckedIn ? '#ECFDF5' : '#FDF2F4';    // Background Hijau Muda vs Pink Muda
+  const accentColor = isCheckedIn ? '#10B981' : '#D46A83'; 
+  const accentBg = isCheckedIn ? '#ECFDF5' : '#FDF2F4';
 
   const handleDownload = async () => {
     if (!ticketRef.current) return;
@@ -51,11 +49,8 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
       const image = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       link.href = image;
-      
-      // Nama file beda sesuai status
       const prefix = isCheckedIn ? 'Sociolla_Queue_' : 'Sociolla_Booking_';
       link.download = `${prefix}${data.bookingCode || 'TICKET'}.png`;
-      
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -71,15 +66,11 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
 
   return (
     <div className="flex flex-col items-center justify-center w-full animate-fade-in-up">
-      
-      {/* WRAPPER (Area Foto) */}
       <div 
         ref={ticketRef} 
         className="relative w-full max-w-[480px] py-12 px-8"
         style={{ backgroundColor: '#F8FAFC' }}
       >
-        
-        {/* KARTU TIKET */}
         <div 
           id="ticket-container"
           className="bg-white rounded-[2rem] overflow-hidden shadow-2xl relative border-[6px] border-white mx-auto"
@@ -95,13 +86,11 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
                 .font-mono { font-family: 'Roboto Mono', monospace !important; }
             `}</style>
 
-            {/* HEADER (Warna Berubah Dinamis) */}
             <div className="bg-[#2D2D2D] p-6 text-white relative overflow-hidden">
                 <div 
                     className="absolute top-0 right-0 w-32 h-32 rounded-full blur-[50px] opacity-40 -mr-10 -mt-10"
                     style={{ backgroundColor: accentColor }}
                 ></div>
-                
                 <div className="flex justify-between items-center relative z-10 mb-6">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center p-1">
@@ -120,25 +109,21 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
                         </span>
                     </div>
                 </div>
-
                 <div className="text-center relative z-10 mb-2">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mb-1">
                         {isCheckedIn ? 'QUEUE NUMBER' : 'LICENSE PLATE'}
                     </p>
                     <h1 className="text-5xl font-black tracking-tighter text-white" style={{ letterSpacing: '-0.05em' }}>
-                        {/* Jika Tiket Masuk: Tampilkan SOC-123. Jika Booking: Tampilkan Plat B 1234 */}
                         {isCheckedIn ? (data.queueNumber || data.bookingCode.slice(-4)) : data.licensePlate}
                     </h1>
                 </div>
             </div>
 
-            {/* ISI TIKET */}
             <div className="bg-white p-6 relative">
                 <div className="absolute left-0 top-[-16px] w-8 h-8 rounded-full z-20" style={{ transform: 'translateX(-50%)', backgroundColor: '#F8FAFC' }}></div>
                 <div className="absolute right-0 top-[-16px] w-8 h-8 rounded-full z-20" style={{ transform: 'translateX(50%)', backgroundColor: '#F8FAFC' }}></div>
                 <div className="absolute left-6 right-6 top-[-1px] border-t-2 border-dashed border-slate-300 z-10"></div>
 
-                {/* INFO STATUS KHUSUS TIKET MASUK */}
                 {isCheckedIn && (
                     <div className="mb-6 p-3 rounded-xl flex items-center gap-3 relative z-20" style={{ backgroundColor: accentBg }}>
                         <Megaphone className="w-5 h-5 shrink-0" style={{ color: accentColor }} />
@@ -160,7 +145,6 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">VENDOR / PT</p>
                         <p className="font-bold text-slate-800 text-sm truncate">{data.company}</p>
                     </div>
-                    
                     <div>
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
                             {isCheckedIn ? 'GATE IN TIME' : 'SLOT TIME'}
@@ -174,7 +158,6 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
                             </span>
                         </div>
                     </div>
-                    
                     <div className="text-right">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">DATE</p>
                         <div className="flex items-center justify-end gap-1 text-slate-800 font-bold text-sm">
@@ -195,7 +178,6 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
                 </div>
             </div>
 
-            {/* FOOTER */}
             <div className="p-4 border-t border-dashed border-slate-200 relative z-20" style={{ backgroundColor: accentBg }}>
                 <div className="flex items-start gap-3 opacity-70">
                     <MapPin className="w-4 h-4 shrink-0 mt-0.5" style={{ color: accentColor }} />
@@ -208,7 +190,6 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
         </div>
       </div>
 
-      {/* TOMBOL DOWNLOAD */}
       <div className="w-full max-w-sm px-4 space-y-3 mt-4 mb-10">
           <button 
             onClick={handleDownload}
@@ -219,13 +200,7 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
               {isGenerating ? <Loader2 className="w-5 h-5 animate-spin"/> : <Download className="w-5 h-5"/>}
               {isGenerating ? 'Memproses Tiket...' : `SIMPAN ${isCheckedIn ? 'TIKET ANTRIAN' : 'BUKTI BOOKING'}`}
           </button>
-          
-          <button 
-            onClick={onClose}
-            className="w-full py-4 bg-white border-2 border-slate-100 text-slate-500 font-bold rounded-2xl hover:bg-slate-50 transition-all"
-          >
-              Tutup & Kembali
-          </button>
+          <button onClick={onClose} className="w-full py-4 bg-white border-2 border-slate-100 text-slate-500 font-bold rounded-2xl hover:bg-slate-50 transition-all">Tutup & Kembali</button>
       </div>
     </div>
   );
