@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Download, Share2, CheckCircle, Truck, Calendar, Clock, MapPin, Loader2 } from 'lucide-react';
+import { Download, MapPin, Calendar, Clock, Loader2 } from 'lucide-react';
 import { DriverData } from '../types';
 import html2canvas from 'html2canvas';
 
@@ -18,16 +18,26 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
     setIsGenerating(true);
 
     try {
-      // Tunggu sebentar agar gambar/font termuat sempurna
+      // Tunggu render font stabil
       await new Promise(resolve => setTimeout(resolve, 800));
 
       const canvas = await html2canvas(ticketRef.current, {
-        scale: 2, // Kualitas tinggi
-        backgroundColor: null,
+        scale: 3, // Resolusi tinggi (3x) agar tajam saat di-zoom
+        backgroundColor: '#F8FAFC', // Warna background wrapper (Abu muda estetik)
         useCORS: true,
         allowTaint: true,
         logging: false,
-        // Opsi tambahan agar font lebih stabil
+        
+        // 🔥 FORMULA ANTI-POTONG 🔥
+        // Menambah area capture melebihi ukuran elemen asli
+        windowWidth: ticketRef.current.scrollWidth + 100,
+        windowHeight: ticketRef.current.scrollHeight + 100,
+        x: -50, // Geser kamera capture ke kiri 50px
+        y: -50, // Geser kamera capture ke atas 50px
+        width: ticketRef.current.offsetWidth + 100, // Lebar total capture
+        height: ticketRef.current.offsetHeight + 100, // Tinggi total capture
+
+        // Paksa Font agar konsisten
         onclone: (clonedDoc) => {
             const clonedElement = clonedDoc.getElementById('ticket-container');
             if (clonedElement) {
@@ -62,26 +72,34 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
 
   return (
     <div className="flex flex-col items-center justify-center w-full animate-fade-in-up">
-      <div className="relative p-4 w-full max-w-[380px]">
+      
+      {/* WRAPPER UTAMA (Capture Target)
+          Diberi padding besar (py-12 px-8) agar shadow tiket tidak terpotong 
+      */}
+      <div 
+        ref={ticketRef} 
+        className="relative w-full max-w-[480px] py-12 px-8"
+        style={{ backgroundColor: '#F8FAFC' }}
+      >
         
-        {/* ID untuk target html2canvas & Style Font eksplisit */}
+        {/* TICKET CONTAINER (Kartu Putih) */}
         <div 
-          ref={ticketRef} 
           id="ticket-container"
-          className="bg-white rounded-[2rem] overflow-hidden shadow-2xl relative border-[6px] border-white"
+          className="bg-white rounded-[2rem] overflow-hidden shadow-2xl relative border-[6px] border-white mx-auto"
           style={{ 
               fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-              letterSpacing: 'normal' // Reset spacing agar tidak aneh
+              letterSpacing: 'normal',
+              maxWidth: '380px' // Lebar fix tiket
           }}
         >
-            {/* --- GAYA KHUSUS AGAR HASIL FOTO RAPI --- */}
+            {/* Inject Font Google untuk memastikan hasil render */}
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Roboto+Mono:wght@700&display=swap');
                 #ticket-container * { font-family: 'Inter', sans-serif !important; }
                 .font-mono { font-family: 'Roboto Mono', monospace !important; }
             `}</style>
 
-            {/* HEADER PINK/HITAM */}
+            {/* HEADER */}
             <div className="bg-[#2D2D2D] p-6 text-white relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-[#D46A83] rounded-full blur-[50px] opacity-40 -mr-10 -mt-10"></div>
                 
@@ -115,14 +133,15 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
                 </div>
             </div>
 
-            {/* BODY PUTIH (DATA & QR) */}
+            {/* BODY */}
             <div className="bg-white p-6 relative">
-                {/* Hiasan Bulatan di Pinggir */}
-                <div className="absolute -left-4 top-[-16px] w-8 h-8 bg-[#FDF2F4] rounded-full z-20"></div>
-                <div className="absolute -right-4 top-[-16px] w-8 h-8 bg-[#FDF2F4] rounded-full z-20"></div>
-                <div className="absolute left-4 right-4 top-[-1px] border-t-2 border-dashed border-slate-300 z-10"></div>
+                {/* Hiasan Bulatan Samping - Disesuaikan agar pas di tengah border */}
+                <div className="absolute left-0 top-[-16px] w-8 h-8 bg-[#F8FAFC] rounded-full z-20" style={{ transform: 'translateX(-50%)' }}></div>
+                <div className="absolute right-0 top-[-16px] w-8 h-8 bg-[#F8FAFC] rounded-full z-20" style={{ transform: 'translateX(50%)' }}></div>
+                
+                {/* Garis Putus-putus */}
+                <div className="absolute left-6 right-6 top-[-1px] border-t-2 border-dashed border-slate-300 z-10"></div>
 
-                {/* Grid Data Driver - Menggunakan truncate agar tidak tumpah */}
                 <div className="grid grid-cols-2 gap-y-6 mt-4 relative z-20">
                     <div className="pr-2">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">DRIVER NAME</p>
@@ -150,20 +169,19 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
                     </div>
                 </div>
 
-                {/* QR Code Area */}
                 <div className="mt-8 flex flex-col items-center justify-center relative z-20">
                     <div className="p-3 bg-white border-4 border-[#FDF2F4] rounded-2xl shadow-sm">
                         <QRCodeSVG value={data.bookingCode} size={160} />
                     </div>
-                    {/* Kode Booking Pakai Font Mono agar Rapi */}
-                    <p className="mt-4 font-mono font-bold text-lg sm:text-xl tracking-widest text-slate-700 text-center break-all" style={{ fontFamily: '"Roboto Mono", monospace' }}>
+                    {/* Padding px-4 ditambahkan agar teks panjang tidak mepet pinggir */}
+                    <p className="mt-4 font-mono font-bold text-lg sm:text-xl tracking-widest text-slate-700 text-center break-all px-4" style={{ fontFamily: '"Roboto Mono", monospace' }}>
                         {data.bookingCode}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-1">Tunjukkan QR ini kepada Security</p>
                 </div>
             </div>
 
-            {/* FOOTER LOKASI */}
+            {/* FOOTER */}
             <div className="bg-[#FDF2F4] p-4 border-t border-dashed border-slate-200 relative z-20">
                 <div className="flex items-start gap-3 opacity-70">
                     <MapPin className="w-4 h-4 text-[#D46A83] shrink-0 mt-0.5" />
@@ -176,7 +194,7 @@ const TicketPass: React.FC<Props> = ({ data, onClose }) => {
         </div>
       </div>
 
-      {/* TOMBOL DOWNLOAD & TUTUP */}
+      {/* TOMBOL AKSI */}
       <div className="w-full max-w-sm px-4 space-y-3 mt-4 mb-10">
           <button 
             onClick={handleDownload}
