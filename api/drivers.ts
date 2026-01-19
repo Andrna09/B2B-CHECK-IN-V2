@@ -17,66 +17,84 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 });
 
 // --- TYPE DEFINITIONS ---
-// Definisi tipe data agar tidak menggunakan 'any'
+// Interface ini SAMA PERSIS dengan struktur tabel 'drivers' di SQL Anda
 interface DriverPayload {
   id: string;
   name: string;
   phone: string;
   licensePlate: string;
   company: string;
-  pic?: string;
-  purpose: string;
-  doNumber?: string;
-  itemType?: string;
+  purpose: string; // 'LOADING' | 'UNLOADING'
+  entryType: string; // 'WALK_IN' | 'BOOKING'
+  bookingCode?: string;
+  poNumber?: string;   // Pengganti doNumber
+  visitDate?: string;  // YYYY-MM-DD
+  slotTime?: string;   // HH:MM
   status: string;
   gate?: string;
   queueNumber?: string;
-  priority?: boolean;
-  entryType: string;
+  
+  // Timestamps (BigInt di SQL, number di JS)
   checkInTime?: number;
-  arrivedAtGateTime?: number;
   verifiedTime?: number;
   calledTime?: number;
   loadingStartTime?: number;
   endTime?: number;
   exitTime?: number;
+  
+  // Dokumen
   notes?: string;
   documentFile?: string;
+  photoBeforeUrls?: string[];
+  photoAfterUrls?: string[];
+
+  // Admin Notes
   rejectionReason?: string;
+  adminNotes?: string;
   securityNotes?: string;
+  
+  // Audit
   verifiedBy?: string;
   calledBy?: string;
   exitVerifiedBy?: string;
 }
 
-// Helper: Mapping CamelCase (Frontend) -> Snake_case (Database)
+// Helper: Mapping CamelCase (Frontend) -> Snake_case (Database SQL)
+// Pastikan nama properti di return object SAMA dengan nama kolom di CREATE TABLE
 const mapToDb = (data: Partial<DriverPayload>) => {
-  // Hanya ambil field yang valid untuk dikirim ke DB
   return {
     id: data.id,
     name: data.name,
     phone: data.phone,
     license_plate: data.licensePlate,
     company: data.company,
-    pic: data.pic,
     purpose: data.purpose,
-    do_number: data.doNumber,
-    item_type: data.itemType,
+    entry_type: data.entryType || 'WALK_IN', // Default sesuai SQL
+    booking_code: data.bookingCode,
+    po_number: data.poNumber,   // KOLOM BARU
+    visit_date: data.visitDate, // KOLOM BARU
+    slot_time: data.slotTime,   // KOLOM BARU
     status: data.status,
     gate: data.gate,
     queue_number: data.queueNumber,
-    priority: data.priority,
-    entry_type: data.entryType,
+    
+    // Waktu
     check_in_time: data.checkInTime,
-    arrived_at_gate_time: data.arrivedAtGateTime,
     verified_time: data.verifiedTime,
     called_time: data.calledTime,
     loading_start_time: data.loadingStartTime,
     end_time: data.endTime,
     exit_time: data.exitTime,
+    
+    // Dokumen
     notes: data.notes,
     document_file: data.documentFile,
+    photo_before_urls: data.photoBeforeUrls, // Array Text di SQL
+    photo_after_urls: data.photoAfterUrls,   // Array Text di SQL
+    
+    // Admin
     rejection_reason: data.rejectionReason,
+    admin_notes: data.adminNotes,
     security_notes: data.securityNotes,
     verified_by: data.verifiedBy,
     called_by: data.calledBy,
@@ -84,32 +102,38 @@ const mapToDb = (data: Partial<DriverPayload>) => {
   };
 };
 
-// Helper: Mapping Snake_case (Database) -> CamelCase (Frontend)
+// Helper: Mapping Snake_case (Database SQL) -> CamelCase (Frontend)
 const mapToFrontend = (row: Record<string, any>): DriverPayload => ({
   id: row.id,
   name: row.name,
   phone: row.phone,
   licensePlate: row.license_plate,
   company: row.company,
-  pic: row.pic,
   purpose: row.purpose,
-  doNumber: row.do_number,
-  itemType: row.item_type,
+  entryType: row.entry_type,
+  bookingCode: row.booking_code,
+  poNumber: row.po_number,
+  visitDate: row.visit_date,
+  slotTime: row.slot_time,
   status: row.status,
   gate: row.gate,
   queueNumber: row.queue_number,
-  priority: row.priority,
-  entryType: row.entry_type,
-  checkInTime: Number(row.check_in_time),
-  arrivedAtGateTime: row.arrived_at_gate_time ? Number(row.arrived_at_gate_time) : undefined,
+  
+  // Konversi BigInt/String angka ke Number JS
+  checkInTime: row.check_in_time ? Number(row.check_in_time) : undefined,
   verifiedTime: row.verified_time ? Number(row.verified_time) : undefined,
   calledTime: row.called_time ? Number(row.called_time) : undefined,
   loadingStartTime: row.loading_start_time ? Number(row.loading_start_time) : undefined,
   endTime: row.end_time ? Number(row.end_time) : undefined,
   exitTime: row.exit_time ? Number(row.exit_time) : undefined,
+  
   notes: row.notes,
   documentFile: row.document_file,
+  photoBeforeUrls: row.photo_before_urls,
+  photoAfterUrls: row.photo_after_urls,
+  
   rejectionReason: row.rejection_reason,
+  adminNotes: row.admin_notes,
   securityNotes: row.security_notes,
   verifiedBy: row.verified_by,
   calledBy: row.called_by,
@@ -139,7 +163,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: rows, error } = await supabase
         .from('drivers')
         .select('*')
-        .order('check_in_time', { ascending: false })
+        .order('check_in_time', { ascending: false }) // Sort dari yang terbaru
         .limit(500);
 
       if (error) throw error;
@@ -153,7 +177,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const inputData = data as DriverPayload;
       let documentUrl = inputData.documentFile;
 
-      // 1. Upload Base64 Image to Supabase Storage
+      // 1. Upload Base64 Image to Supabase Storage (Jika ada)
       if (documentUrl && documentUrl.startsWith('data:')) {
         try {
            const base64Data = documentUrl.split(',')[1];
@@ -200,8 +224,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const inputData = data as DriverPayload;
       const dbPayload = mapToDb(inputData);
       
-      // Remove ID from payload body to avoid trying to update PK
-      // Gunakan destructuring untuk memisahkan id
+      // Pisahkan ID agar tidak ikut di-update
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, ...updateFields } = dbPayload;
 
