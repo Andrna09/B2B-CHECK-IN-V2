@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Clock, MapPin, RefreshCw, Truck, FileText, CheckCircle, ArrowLeft, Loader2, Megaphone, AlertCircle } from 'lucide-react';
-// [FIX] Gunakan GateConfig as Gate untuk menghindari error import
-import { DriverData, QueueStatus, GateConfig as Gate } from '../types';
+import { Clock, MapPin, RefreshCw, Truck, FileText, ArrowLeft, Loader2, Megaphone, AlertCircle } from 'lucide-react';
+import { DriverData, QueueStatus } from '../types';
 import { getDriverById } from '../services/dataService';
+import TicketPass from './TicketPass'; // [PENTING] Import komponen tiket
 
 interface Props {
   driverId: string;
@@ -14,6 +14,9 @@ const DriverStatus: React.FC<Props> = ({ driverId, onBack }) => {
   const [driver, setDriver] = useState<DriverData | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  
+  // [BARU] State untuk Modal Tiket
+  const [showTicketModal, setShowTicketModal] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -61,7 +64,7 @@ const DriverStatus: React.FC<Props> = ({ driverId, onBack }) => {
       case QueueStatus.PENDING_REVIEW: return 'bg-amber-100 text-amber-700 border-amber-200';
       case QueueStatus.BOOKED: return 'bg-blue-100 text-blue-700 border-blue-200';
       case QueueStatus.CHECKED_IN: return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      case QueueStatus.CALLED: return 'bg-orange-100 text-orange-700 border-orange-200'; // Flashy
+      case QueueStatus.CALLED: return 'bg-orange-100 text-orange-700 border-orange-200'; 
       case QueueStatus.LOADING: return 'bg-purple-100 text-purple-700 border-purple-200';
       case QueueStatus.COMPLETED: return 'bg-green-100 text-green-700 border-green-200';
       case QueueStatus.REJECTED: 
@@ -113,7 +116,6 @@ const DriverStatus: React.FC<Props> = ({ driverId, onBack }) => {
                  <p className="text-lg font-bold text-slate-800 mt-2">Segera Menuju {driver.gate || 'Loading Dock'}</p>
               </div>
            ) : (
-              // Default View
               <div className="py-2">
                  <h2 className="text-3xl font-black text-slate-800">{driver.licensePlate}</h2>
                  <p className="text-slate-500">{driver.company}</p>
@@ -157,6 +159,31 @@ const DriverStatus: React.FC<Props> = ({ driverId, onBack }) => {
               </div>
             )}
         </div>
+
+        {/* ======================================================= */}
+        {/* 🔥 [FITUR BARU] TOMBOL DOWNLOAD TIKET 🔥 */}
+        {/* ======================================================= */}
+        {driver.status === QueueStatus.BOOKED && (
+             <div className="mt-8 animate-fade-in-up">
+                <p className="text-center text-sm text-slate-500 mb-2">Tiket Anda sudah siap!</p>
+                <button 
+                    onClick={() => setShowTicketModal(true)} 
+                    className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold rounded-2xl shadow-xl shadow-pink-200 hover:scale-[1.02] transition-transform flex items-center justify-center gap-3"
+                >
+                    <FileText className="w-6 h-6"/> 
+                    <span className="text-lg">DOWNLOAD TIKET</span>
+                </button>
+             </div>
+        )}
+
+        {/* MODAL TIKET PASS */}
+        {showTicketModal && (
+            <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
+                <div className="w-full max-w-sm">
+                     <TicketPass data={driver} onClose={() => setShowTicketModal(false)} />
+                </div>
+            </div>
+        )}
 
         <p className="text-center text-xs text-slate-300 font-medium pt-4">
           Terakhir diperbarui: {lastUpdate.toLocaleTimeString()}
