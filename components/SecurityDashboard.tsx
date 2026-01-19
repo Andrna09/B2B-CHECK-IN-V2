@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Truck, Search, LogOut, Shield, AlertTriangle, Clock, Edit2, CheckSquare, XCircle, ChevronRight, Filter, QrCode } from 'lucide-react';
 import { DriverData, QueueStatus, UserProfile } from '../types';
 import { getDrivers, reviseAndCheckIn, checkoutDriver, rejectGate } from '../services/dataService';
-// Library Scanner Versi 2.x
 import { Scanner } from '@yudiel/react-qr-scanner';
 
 interface Props {
@@ -11,17 +10,21 @@ interface Props {
 }
 
 const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
+  // State Utama
   const [activeTab, setActiveTab] = useState<'QUEUE' | 'INSIDE' | 'HISTORY'>('QUEUE');
   const [drivers, setDrivers] = useState<DriverData[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState(''); 
   
+  // State Scanner & Modal Inspeksi
   const [showScanner, setShowScanner] = useState(false);
   const [inspectDriver, setInspectDriver] = useState<DriverData | null>(null);
   
+  // State Fitur Revisi (LOGIKA ASLI DIPERLENGKAP)
   const [isRevising, setIsRevising] = useState(false);
-  const [reviseForm, setReviseForm] = useState({ name: '', plate: '', company: '' });
+  const [reviseForm, setReviseForm] = useState({ name: '', plate: '', company: '', phone: '', purpose: '' });
 
+  // State Checklist (Fitur Baru)
   const [checklist, setChecklist] = useState({
     suratJalan: false,
     safetyShoes: false,
@@ -43,13 +46,17 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // --- LOGIC FILTER ---
+  // --- LOGIC FILTER (Pencarian & Tab) ---
   const filteredDrivers = drivers.filter(d => {
     let matchTab = false;
+    // Tab QUEUE: Hanya menampilkan yang BOOKED atau CHECKED_IN (Antrian Luar)
     if (activeTab === 'QUEUE') matchTab = [QueueStatus.BOOKED, QueueStatus.CHECKED_IN].includes(d.status);
+    // Tab INSIDE: Menampilkan yang sudah masuk (AT_GATE, CALLED, LOADING)
     if (activeTab === 'INSIDE') matchTab = [QueueStatus.AT_GATE, QueueStatus.CALLED, QueueStatus.LOADING].includes(d.status);
+    // Tab HISTORY: Selesai atau Ditolak
     if (activeTab === 'HISTORY') matchTab = [QueueStatus.COMPLETED, QueueStatus.EXITED, QueueStatus.REJECTED, QueueStatus.REJECTED_NEED_REBOOK].includes(d.status);
     
+    // Pencarian Cepat
     const searchLower = searchTerm.toLowerCase();
     const matchSearch = 
         (d.bookingCode && d.bookingCode.toLowerCase().includes(searchLower)) ||
@@ -60,9 +67,11 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
     return matchTab && matchSearch;
   });
 
+  // Hitung Kapasitas
   const trucksInside = drivers.filter(d => [QueueStatus.AT_GATE, QueueStatus.CALLED, QueueStatus.LOADING].includes(d.status)).length;
   const maxCapacity = 20;
 
+  // Helper Durasi
   const getDuration = (startTime?: number) => {
       if (!startTime) return { hours: 0, text: '-' };
       const diff = Date.now() - startTime;
@@ -72,10 +81,13 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
   };
 
   // --- LOGIC ACTION ---
+  
+  // 1. Handle Scan Kamera
   const handleScanResult = (text: string) => {
       if (text) {
           setSearchTerm(text);
           setShowScanner(false);
+          // Cari driver yang cocok
           const found = drivers.find(d => d.bookingCode === text || d.licensePlate === text);
           if (found) {
               openInspection(found);
@@ -85,27 +97,45 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
       }
   };
 
+  // 2. Buka Modal Inspeksi & Siapkan Form Revisi
   const openInspection = (driver: DriverData) => {
       setInspectDriver(driver);
-      setReviseForm({ name: driver.name, plate: driver.licensePlate, company: driver.company });
+      // Isi form revisi dengan data driver saat ini (Logika Asli)
+      setReviseForm({ 
+          name: driver.name, 
+          plate: driver.licensePlate, 
+          company: driver.company,
+          phone: driver.phone || '',
+          purpose: driver.purpose || 'UNLOADING'
+      });
       setIsRevising(false); 
       setChecklist({ suratJalan: false, safetyShoes: false, vest: false, helmet: false, vehicleCondition: false });
   };
 
+  // 3. Proses Masuk (Gabungan Logika Revisi + Checklist)
   const handleApproveEntry = async () => {
       if (!inspectDriver) return;
-      const isComplete = Object.values(checklist).every(v => v === true);
       
+      // Validasi Checklist
+      const isComplete = Object.values(checklist).every(v => v === true);
       if (!isComplete) {
-          alert("Harap ceklis semua item pemeriksaan sebelum mengizinkan masuk.");
+          alert("Harap ceklis semua item pemeriksaan keamanan sebelum mengizinkan masuk.");
           return;
       }
 
-      if (confirm(`Izinkan ${isRevising ? reviseForm.plate : inspectDriver.licensePlate} masuk?`)) {
+      const confirmMsg = isRevising 
+        ? `⚠️ PERHATIAN: DATA DIREVISI.\n\nSimpan perubahan dan izinkan ${reviseForm.plate} masuk?` 
+        : `Izinkan ${inspectDriver.licensePlate} masuk?`;
+
+      if (confirm(confirmMsg)) {
+          // PANGGIL FUNGSI ASLI BAPAK: reviseAndCheckIn
+          // Jika mode revisi, pakai data form. Jika tidak, pakai data asli.
           await reviseAndCheckIn(inspectDriver.id, isRevising ? reviseForm : {
               name: inspectDriver.name,
               plate: inspectDriver.licensePlate,
-              company: inspectDriver.company
+              company: inspectDriver.company,
+              phone: inspectDriver.phone || '',
+              purpose: inspectDriver.purpose
           });
           
           setInspectDriver(null);
@@ -113,6 +143,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
       }
   };
 
+  // 4. Proses Keluar (Checkout)
   const handleCheckout = async () => {
       if (!inspectDriver) return;
       if (confirm(`Konfirmasi ${inspectDriver.licensePlate} keluar area?`)) {
@@ -124,7 +155,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
-      {/* HEADER */}
+      {/* HEADER & STATS */}
       <div className="bg-slate-900 text-white px-6 py-4 shadow-md sticky top-0 z-20">
         <div className="flex justify-between items-center max-w-7xl mx-auto">
             <div className="flex items-center gap-3">
@@ -141,6 +172,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
             </div>
             
             <div className="flex items-center gap-4">
+                {/* Counter Kapasitas */}
                 <div className={`px-4 py-2 rounded-xl border flex items-center gap-3 ${trucksInside >= maxCapacity ? 'bg-red-500/20 border-red-500 text-red-100' : 'bg-slate-800 border-slate-700'}`}>
                     <div>
                         <p className="text-[10px] text-slate-400 uppercase tracking-wider">Inside</p>
@@ -157,7 +189,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
 
       <div className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-6 space-y-6">
         
-        {/* CONTROLS */}
+        {/* CONTROLS (TABS, SEARCH, SCAN BUTTON) */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex p-1 bg-white rounded-xl shadow-sm border border-slate-200 w-full md:w-auto">
                 {['QUEUE', 'INSIDE', 'HISTORY'].map((tab) => (
@@ -168,7 +200,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                             activeTab === tab ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
                         }`}
                     >
-                        {tab === 'QUEUE' ? 'Masuk' : tab === 'INSIDE' ? 'Keluar' : 'Riwayat'}
+                        {tab === 'QUEUE' ? 'Masuk (Antrian)' : tab === 'INSIDE' ? 'Di Dalam (Keluar)' : 'Riwayat'}
                     </button>
                 ))}
             </div>
@@ -184,6 +216,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                         className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"
                     />
                 </div>
+                {/* Tombol Kamera */}
                 <button 
                     onClick={() => setShowScanner(true)}
                     className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 flex items-center gap-2 whitespace-nowrap"
@@ -193,7 +226,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
             </div>
         </div>
 
-        {/* LIST */}
+        {/* LIST CARD */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredDrivers.length === 0 ? (
                 <div className="col-span-full py-12 text-center text-slate-400">
@@ -222,6 +255,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                                 </span>
                             </div>
 
+                            {/* Indikator Durasi (Hanya di Tab Inside) */}
                             {activeTab === 'INSIDE' && duration && (
                                 <div className={`flex items-center gap-2 mb-4 text-xs font-bold px-3 py-1.5 rounded-lg w-fit ${
                                     isOverstay ? 'bg-red-50 text-red-600' : 
@@ -236,6 +270,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                                 <span className="font-bold text-slate-600">DRIVER:</span> {driver.name}
                             </div>
 
+                            {/* Tombol Aksi */}
                             <button 
                                 onClick={() => openInspection(driver)}
                                 className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 flex items-center justify-center gap-2"
@@ -249,11 +284,12 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
         </div>
       </div>
 
-      {/* --- MODAL INSPEKSI --- */}
+      {/* --- MODAL UTAMA (INSPEKSI + REVISI + CHECKLIST) --- */}
       {inspectDriver && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in-up">
               <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
                   
+                  {/* Header Modal */}
                   <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                       <div>
                           <h2 className="text-lg font-bold">{isRevising ? 'Revisi Data' : `Pemeriksaan ${activeTab === 'INSIDE' ? 'Keluar' : 'Masuk'}`}</h2>
@@ -268,26 +304,64 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                       
                       {isRevising ? (
                           <div className="space-y-4 animate-fade-in-up">
-                              <div>
-                                  <label className="text-xs font-bold text-slate-400 uppercase">Plat Nomor</label>
-                                  <input 
-                                      value={reviseForm.plate}
-                                      onChange={e => setReviseForm({...reviseForm, plate: e.target.value.toUpperCase()})}
-                                      className="w-full p-3 border-2 border-slate-200 rounded-xl font-black text-xl uppercase"
-                                  />
+                              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+                                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5"/>
+                                  <div>
+                                      <p className="text-xs font-bold text-amber-800">MODE REVISI DATA</p>
+                                      <p className="text-[10px] text-amber-700">Perubahan akan dicatat dalam Log Sistem (Audit Trail).</p>
+                                  </div>
                               </div>
-                              <div>
-                                  <label className="text-xs font-bold text-slate-400 uppercase">Nama Driver</label>
-                                  <input 
-                                      value={reviseForm.name}
-                                      onChange={e => setReviseForm({...reviseForm, name: e.target.value})}
-                                      className="w-full p-3 border-2 border-slate-200 rounded-xl font-bold"
-                                  />
+
+                              <div className="grid grid-cols-2 gap-3">
+                                  <div className="col-span-1">
+                                      <label className="text-[10px] font-bold text-slate-400 uppercase">Plat Nomor</label>
+                                      <input 
+                                          value={reviseForm.plate}
+                                          onChange={e => setReviseForm({...reviseForm, plate: e.target.value.toUpperCase()})}
+                                          className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-black text-lg uppercase focus:border-blue-500 outline-none"
+                                      />
+                                  </div>
+                                  <div className="col-span-1">
+                                      <label className="text-[10px] font-bold text-slate-400 uppercase">No. WhatsApp</label>
+                                      <input 
+                                          value={reviseForm.phone}
+                                          onChange={e => setReviseForm({...reviseForm, phone: e.target.value})}
+                                          className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-bold text-lg focus:border-blue-500 outline-none"
+                                          placeholder="628..."
+                                      />
+                                  </div>
+                                  <div className="col-span-2">
+                                      <label className="text-[10px] font-bold text-slate-400 uppercase">Nama Driver</label>
+                                      <input 
+                                          value={reviseForm.name}
+                                          onChange={e => setReviseForm({...reviseForm, name: e.target.value})}
+                                          className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-bold text-slate-700 focus:border-blue-500 outline-none"
+                                      />
+                                  </div>
+                                  <div className="col-span-2">
+                                      <label className="text-[10px] font-bold text-slate-400 uppercase">Vendor / PT</label>
+                                      <input 
+                                          value={reviseForm.company}
+                                          onChange={e => setReviseForm({...reviseForm, company: e.target.value})}
+                                          className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-bold text-slate-700 focus:border-blue-500 outline-none"
+                                      />
+                                  </div>
+                                  <div className="col-span-2">
+                                      <label className="text-[10px] font-bold text-slate-400 uppercase">Tujuan</label>
+                                      <select 
+                                          value={reviseForm.purpose}
+                                          onChange={e => setReviseForm({...reviseForm, purpose: e.target.value})}
+                                          className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-bold text-slate-700 bg-white"
+                                      >
+                                          <option value="LOADING">LOADING (Muat Barang)</option>
+                                          <option value="UNLOADING">UNLOADING (Bongkar Barang)</option>
+                                      </select>
+                                  </div>
                               </div>
-                              <div className="p-3 bg-blue-50 text-blue-700 text-xs rounded-lg font-medium">
-                                  *Data akan diperbarui setelah Anda klik tombol "Simpan & Masuk" di bawah.
-                              </div>
-                              <button onClick={() => setIsRevising(false)} className="text-sm text-slate-400 underline w-full text-center">Batal Revisi</button>
+
+                              <button onClick={() => setIsRevising(false)} className="text-xs text-red-500 font-bold underline w-full text-center py-2">
+                                  Batal & Kembali ke Data Asli
+                              </button>
                           </div>
                       ) : (
                           <>
@@ -341,6 +415,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                       )}
                   </div>
 
+                  {/* Footer Modal */}
                   <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0 space-y-3">
                       <button 
                           onClick={activeTab === 'INSIDE' ? handleCheckout : handleApproveEntry}
