@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, Search, LogOut, Shield, AlertTriangle, Clock, Edit2, CheckSquare, XCircle, ChevronRight, Filter, QrCode } from 'lucide-react';
 import { DriverData, QueueStatus, UserProfile } from '../types';
-// Menggunakan fungsi service yang sudah ada (logika asli tidak berubah)
 import { getDrivers, reviseAndCheckIn, checkoutDriver, rejectGate } from '../services/dataService';
+// Library Scanner Versi 2.x
 import { Scanner } from '@yudiel/react-qr-scanner';
 
 interface Props {
@@ -11,21 +11,17 @@ interface Props {
 }
 
 const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
-  // State Utama
   const [activeTab, setActiveTab] = useState<'QUEUE' | 'INSIDE' | 'HISTORY'>('QUEUE');
   const [drivers, setDrivers] = useState<DriverData[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState(''); 
   
-  // State Scanner & Modal Inspeksi
   const [showScanner, setShowScanner] = useState(false);
   const [inspectDriver, setInspectDriver] = useState<DriverData | null>(null);
   
-  // State Fitur Revisi (LOGIKA ASLI BAPAK)
   const [isRevising, setIsRevising] = useState(false);
   const [reviseForm, setReviseForm] = useState({ name: '', plate: '', company: '' });
 
-  // State Checklist (Fitur Tambahan)
   const [checklist, setChecklist] = useState({
     suratJalan: false,
     safetyShoes: false,
@@ -47,17 +43,13 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // --- LOGIC FILTER (Pencarian & Tab) ---
+  // --- LOGIC FILTER ---
   const filteredDrivers = drivers.filter(d => {
     let matchTab = false;
-    // Tab QUEUE: Hanya menampilkan yang BOOKED atau CHECKED_IN (Antrian Luar)
     if (activeTab === 'QUEUE') matchTab = [QueueStatus.BOOKED, QueueStatus.CHECKED_IN].includes(d.status);
-    // Tab INSIDE: Menampilkan yang sudah masuk (AT_GATE, CALLED, LOADING)
     if (activeTab === 'INSIDE') matchTab = [QueueStatus.AT_GATE, QueueStatus.CALLED, QueueStatus.LOADING].includes(d.status);
-    // Tab HISTORY: Selesai atau Ditolak
     if (activeTab === 'HISTORY') matchTab = [QueueStatus.COMPLETED, QueueStatus.EXITED, QueueStatus.REJECTED, QueueStatus.REJECTED_NEED_REBOOK].includes(d.status);
     
-    // Pencarian Cepat
     const searchLower = searchTerm.toLowerCase();
     const matchSearch = 
         (d.bookingCode && d.bookingCode.toLowerCase().includes(searchLower)) ||
@@ -68,11 +60,9 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
     return matchTab && matchSearch;
   });
 
-  // Hitung Kapasitas
   const trucksInside = drivers.filter(d => [QueueStatus.AT_GATE, QueueStatus.CALLED, QueueStatus.LOADING].includes(d.status)).length;
   const maxCapacity = 20;
 
-  // Helper Durasi
   const getDuration = (startTime?: number) => {
       if (!startTime) return { hours: 0, text: '-' };
       const diff = Date.now() - startTime;
@@ -82,13 +72,10 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
   };
 
   // --- LOGIC ACTION ---
-  
-  // 1. Handle Scan Kamera
   const handleScanResult = (text: string) => {
       if (text) {
           setSearchTerm(text);
           setShowScanner(false);
-          // Cari driver yang cocok
           const found = drivers.find(d => d.bookingCode === text || d.licensePlate === text);
           if (found) {
               openInspection(found);
@@ -98,33 +85,23 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
       }
   };
 
-  // 2. Buka Modal Inspeksi & Siapkan Form Revisi
   const openInspection = (driver: DriverData) => {
       setInspectDriver(driver);
-      // Isi form revisi dengan data driver saat ini (Logika Asli)
       setReviseForm({ name: driver.name, plate: driver.licensePlate, company: driver.company });
       setIsRevising(false); 
       setChecklist({ suratJalan: false, safetyShoes: false, vest: false, helmet: false, vehicleCondition: false });
   };
 
-  // 3. Proses Masuk (Gabungan Logika Revisi + Checklist)
   const handleApproveEntry = async () => {
       if (!inspectDriver) return;
-      
-      // Validasi Checklist
       const isComplete = Object.values(checklist).every(v => v === true);
+      
       if (!isComplete) {
-          alert("Harap ceklis semua item pemeriksaan keamanan sebelum mengizinkan masuk.");
+          alert("Harap ceklis semua item pemeriksaan sebelum mengizinkan masuk.");
           return;
       }
 
-      const confirmMsg = isRevising 
-        ? `Simpan REVISI data dan izinkan masuk?` 
-        : `Izinkan ${inspectDriver.licensePlate} masuk?`;
-
-      if (confirm(confirmMsg)) {
-          // PANGGIL FUNGSI ASLI BAPAK: reviseAndCheckIn
-          // Jika mode revisi, pakai data form. Jika tidak, pakai data asli.
+      if (confirm(`Izinkan ${isRevising ? reviseForm.plate : inspectDriver.licensePlate} masuk?`)) {
           await reviseAndCheckIn(inspectDriver.id, isRevising ? reviseForm : {
               name: inspectDriver.name,
               plate: inspectDriver.licensePlate,
@@ -136,7 +113,6 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
       }
   };
 
-  // 4. Proses Keluar (Checkout)
   const handleCheckout = async () => {
       if (!inspectDriver) return;
       if (confirm(`Konfirmasi ${inspectDriver.licensePlate} keluar area?`)) {
@@ -148,7 +124,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
-      {/* HEADER & STATS */}
+      {/* HEADER */}
       <div className="bg-slate-900 text-white px-6 py-4 shadow-md sticky top-0 z-20">
         <div className="flex justify-between items-center max-w-7xl mx-auto">
             <div className="flex items-center gap-3">
@@ -165,7 +141,6 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
             </div>
             
             <div className="flex items-center gap-4">
-                {/* Counter Kapasitas */}
                 <div className={`px-4 py-2 rounded-xl border flex items-center gap-3 ${trucksInside >= maxCapacity ? 'bg-red-500/20 border-red-500 text-red-100' : 'bg-slate-800 border-slate-700'}`}>
                     <div>
                         <p className="text-[10px] text-slate-400 uppercase tracking-wider">Inside</p>
@@ -182,7 +157,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
 
       <div className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-6 space-y-6">
         
-        {/* CONTROLS (TABS, SEARCH, SCAN BUTTON) */}
+        {/* CONTROLS */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex p-1 bg-white rounded-xl shadow-sm border border-slate-200 w-full md:w-auto">
                 {['QUEUE', 'INSIDE', 'HISTORY'].map((tab) => (
@@ -193,7 +168,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                             activeTab === tab ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
                         }`}
                     >
-                        {tab === 'QUEUE' ? 'Masuk (Antrian)' : tab === 'INSIDE' ? 'Di Dalam (Keluar)' : 'Riwayat'}
+                        {tab === 'QUEUE' ? 'Masuk' : tab === 'INSIDE' ? 'Keluar' : 'Riwayat'}
                     </button>
                 ))}
             </div>
@@ -209,7 +184,6 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                         className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"
                     />
                 </div>
-                {/* Tombol Kamera */}
                 <button 
                     onClick={() => setShowScanner(true)}
                     className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 flex items-center gap-2 whitespace-nowrap"
@@ -219,7 +193,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
             </div>
         </div>
 
-        {/* LIST CARD */}
+        {/* LIST */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredDrivers.length === 0 ? (
                 <div className="col-span-full py-12 text-center text-slate-400">
@@ -248,7 +222,6 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                                 </span>
                             </div>
 
-                            {/* Indikator Durasi (Hanya di Tab Inside) */}
                             {activeTab === 'INSIDE' && duration && (
                                 <div className={`flex items-center gap-2 mb-4 text-xs font-bold px-3 py-1.5 rounded-lg w-fit ${
                                     isOverstay ? 'bg-red-50 text-red-600' : 
@@ -263,7 +236,6 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                                 <span className="font-bold text-slate-600">DRIVER:</span> {driver.name}
                             </div>
 
-                            {/* Tombol Aksi */}
                             <button 
                                 onClick={() => openInspection(driver)}
                                 className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 flex items-center justify-center gap-2"
@@ -277,12 +249,11 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
         </div>
       </div>
 
-      {/* --- MODAL UTAMA (INSPEKSI + REVISI + CHECKLIST) --- */}
+      {/* --- MODAL INSPEKSI --- */}
       {inspectDriver && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in-up">
               <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
                   
-                  {/* Header Modal */}
                   <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                       <div>
                           <h2 className="text-lg font-bold">{isRevising ? 'Revisi Data' : `Pemeriksaan ${activeTab === 'INSIDE' ? 'Keluar' : 'Masuk'}`}</h2>
@@ -295,7 +266,6 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
 
                   <div className="p-6 overflow-y-auto">
                       
-                      {/* --- FORM REVISI (Fitur Lama Bapak) --- */}
                       {isRevising ? (
                           <div className="space-y-4 animate-fade-in-up">
                               <div>
@@ -320,9 +290,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                               <button onClick={() => setIsRevising(false)} className="text-sm text-slate-400 underline w-full text-center">Batal Revisi</button>
                           </div>
                       ) : (
-                          /* --- TAMPILAN NORMAL (CHECKLIST) --- */
                           <>
-                              {/* Tombol Masuk Mode Revisi (Hanya saat Masuk) */}
                               {activeTab === 'QUEUE' && (
                                 <div className="mb-6 flex justify-end">
                                     <button 
@@ -334,7 +302,6 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                                 </div>
                               )}
 
-                              {/* Alert Overstay (Hanya saat Keluar) */}
                               {activeTab === 'INSIDE' && getDuration(inspectDriver.checkInTime).hours >= 4 && (
                                   <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
                                       <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -374,7 +341,6 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
                       )}
                   </div>
 
-                  {/* Footer Modal */}
                   <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0 space-y-3">
                       <button 
                           onClick={activeTab === 'INSIDE' ? handleCheckout : handleApproveEntry}
@@ -408,7 +374,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
           </div>
       )}
 
-      {/* --- MODAL KAMERA SCANNER --- */}
+      {/* --- MODAL KAMERA SCANNER (UPDATED V2 PROPS) --- */}
       {showScanner && (
         <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center">
             <div className="absolute top-6 right-6 z-10">
@@ -419,12 +385,16 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
             
             <div className="w-full max-w-md aspect-square bg-black relative rounded-3xl overflow-hidden border-2 border-slate-700">
                 <Scanner 
-                    onResult={handleScanResult}
+                    onScan={(result) => {
+                        if (result && result.length > 0) {
+                            handleScanResult(result[0].rawValue);
+                        }
+                    }}
                     onError={(error) => console.log(error?.message)}
-                    options={{ delayBetweenScanAttempts: 500, constraints: { facingMode: 'environment' } }}
+                    constraints={{ facingMode: 'environment' }}
+                    scanDelay={500}
                 />
                 
-                {/* Overlay Garis Scan */}
                 <div className="absolute inset-0 border-[40px] border-black/50 flex items-center justify-center pointer-events-none">
                     <div className="w-64 h-64 border-4 border-emerald-500/50 rounded-3xl relative animate-pulse">
                          <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-red-500 shadow-[0_0_10px_rgba(255,0,0,0.8)]"></div>
@@ -433,8 +403,7 @@ const SecurityDashboard: React.FC<Props> = ({ onBack, currentUser }) => {
             </div>
             
             <p className="text-white mt-8 font-bold text-center px-6">
-                Arahkan kamera ke QR Code Tiket Driver. <br/>
-                <span className="text-sm text-slate-400 font-normal">Pastikan cahaya cukup terang.</span>
+                Arahkan kamera ke QR Code Tiket Driver.
             </p>
         </div>
       )}
