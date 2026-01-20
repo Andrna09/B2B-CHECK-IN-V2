@@ -47,8 +47,6 @@ const mapDatabaseToDriver = (dbData: any): DriverData => ({
   securityNotes: dbData.security_notes
 });
 
-// --- CORE FUNCTIONS ---
-
 export const createCheckIn = async (data: Partial<DriverData>, docFile?: string): Promise<DriverData | null> => {
   const payload: any = {
       name: data.name,
@@ -71,6 +69,7 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
   return insertedData ? mapDatabaseToDriver(insertedData) : null;
 };
 
+// 🔥 UPDATE 1: Link Booking dengan '?mode=booking' 🔥
 export const approveBooking = async (id: string): Promise<boolean> => {
     const { data: driver, error: fetchError } = await supabase.from('drivers').select('purpose, name, phone').eq('id', id).single();
     if (fetchError || !driver) return false;
@@ -95,7 +94,8 @@ export const approveBooking = async (id: string): Promise<boolean> => {
     }).eq('id', id);
 
     if (!error && driver.phone) {
-         const appUrl = `${window.location.origin}?ticket_id=${id}`;
+         // 👇 TAMBAHKAN &mode=booking
+         const appUrl = `${window.location.origin}?ticket_id=${id}&mode=booking`;
          const msg = `*TIKET ANDA SUDAH TERBIT!* ✅\n\nHalo ${driver.name},\nKode Booking: *${finalCode}*\n\n👇 *KLIK LINK UNTUK DOWNLOAD TIKET:* 👇\n${appUrl}\n\n⚠️ *PENTING:* Simpan gambar tiket di HP Anda untuk ditunjukkan ke Security.`;
          await sendWhatsAppNotification(driver.phone, msg);
     }
@@ -111,7 +111,7 @@ export const rejectBooking = async (id: string, reason: string): Promise<boolean
     return !error;
 };
 
-// 🔥 FUNGSI REVISI + LOG + WA LINK BARU 🔥
+// 🔥 UPDATE 2: Link Antrian dengan '?mode=live' 🔥
 export const reviseAndCheckIn = async (
     id: string, 
     revisedData: { name: string, plate: string, company: string, phone?: string, purpose?: string }
@@ -145,7 +145,8 @@ export const reviseAndCheckIn = async (
     if (!error) {
         const targetPhone = revisedData.phone || oldData.phone;
         if (targetPhone) {
-            const appUrl = `${window.location.origin}?ticket_id=${id}`;
+            // 👇 TAMBAHKAN &mode=live
+            const appUrl = `${window.location.origin}?ticket_id=${id}&mode=live`;
             const msg = `*CHECK-IN BERHASIL!* 🏁\n\nNomor Antrian: *${queueNo}*\nPlat: ${revisedData.plate}\n\nTiket Anda sudah berubah status menjadi *TIKET ANTRIAN* (Warna Hijau).\n\n👇 *KLIK UNTUK LIHAT TIKET BARU:* 👇\n${appUrl}\n\nSilakan parkir dan tunggu panggilan di TV Monitor.`;
             await sendWhatsAppNotification(targetPhone, msg);
         }
@@ -275,14 +276,15 @@ export const resendBookingNotification = async (id: string): Promise<boolean> =>
     const { data: driver, error } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (error || !driver || !driver.booking_code) return false;
     if (driver.phone) {
-         const appUrl = `${window.location.origin}?ticket_id=${id}`;
+         // 👇 DEFAULTNYA MODE BOOKING KALAU KIRIM ULANG
+         const appUrl = `${window.location.origin}?ticket_id=${id}&mode=booking`;
          const msg = `*PENGIRIMAN ULANG TIKET* 🔄\n\nHalo ${driver.name},\nKode Booking: *${driver.booking_code}*\n\n👇 *KLIK LINK UNTUK DOWNLOAD TIKET:* 👇\n${appUrl}\n\nSimpan pesan ini baik-baik ya.`;
          return await sendWhatsAppNotification(driver.phone, msg);
     }
     return false;
 };
 
-// 🔥 BAGIAN YANG TADI HILANG (DEV CONFIG) 🔥
+// DEV CONFIG
 export interface DevConfig {
   enableGpsBypass: boolean;
   enableMockOCR: boolean;
