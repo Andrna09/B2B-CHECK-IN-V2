@@ -77,7 +77,7 @@ const DriverStatus: React.FC<Props> = ({ driverId, onBack }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col items-center p-4 font-sans pb-20">
+    <div className="min-h-screen bg-slate-100 flex flex-col items-center p-4 font-sans pb-20 relative">
       
       {/* TOMBOL REFRESH MANUAL (Pojok Kanan Atas) */}
       <button 
