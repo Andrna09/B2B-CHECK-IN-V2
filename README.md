@@ -100,7 +100,7 @@ Ikuti langkah ini untuk menjalankan project di lokal komputer Anda.
 
 1. **Clone Repository**
 ```bash
-git clone [https://github.com/Andrna09/warehouse-yms-v3.git](https://github.com/Andrna09/warehouse-yms-v3.git)
+git clone https://github.com/Andrna09/warehouse-yms-v3.git
 cd warehouse-yms-v3
 
 ```
@@ -116,7 +116,7 @@ npm install
 3. **Konfigurasi Environment**
 Buat file `.env` di root folder:
 ```env
-VITE_SUPABASE_URL=[https://your-project.supabase.co](https://your-project.supabase.co)
+VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key-here
 
 ```
@@ -137,8 +137,8 @@ npm run dev
 <h3>👑 Developed By Andrna</h3>
 <p><i>"Quality code for quality logistics operation."</i></p>
 
-<a href="https://github.com/Andrna09">
-<img src="https://www.google.com/search?q=https://img.shields.io/badge/GitHub-Andrna09-181717%3Fstyle%3Dfor-the-badge%26logo%3Dgithub" alt="Andrna GitHub" />
+<a href="[https://github.com/Andrna09](https://github.com/Andrna09)">
+<img src="[https://img.shields.io/badge/GitHub-Andrna09-181717?style=for-the-badge&logo=github](https://www.google.com/search?q=https://img.shields.io/badge/GitHub-Andrna09-181717%3Fstyle%3Dfor-the-badge%26logo%3Dgithub)" alt="Andrna GitHub" />
 </a>
 
 
