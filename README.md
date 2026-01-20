@@ -1,150 +1,315 @@
 <div align="center">
 
-  <img src="public/Logo.png" alt="Warehouse YMS Logo" width="140" height="auto" style="margin-bottom: 20px;" />
-  
-  # WAREHOUSE YMS V3 ENTERPRISE
-  
-  **Sistem Manajemen Logistik & Antrian Gudang Terintegrasi**
-  
-  [![React](https://img.shields.io/badge/Frontend-React_18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
-  [![TypeScript](https://img.shields.io/badge/Language-TypeScript_5.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-  [![Supabase](https://img.shields.io/badge/Backend-Supabase_Realtime-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
-  [![Tailwind](https://img.shields.io/badge/Style-Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-  [![Developer](https://img.shields.io/badge/Dev_By-Andrna-FFD700?style=for-the-badge&logo=github&logoColor=black)](https://github.com/Andrna09)
+<img src="public/Logo.png" alt="Warehouse YMS Logo" width="160" height="auto" />
 
-  <p align="center">
-    <strong>Zero Latency · High Security · Automated Flow</strong><br/>
-    Solusi manajemen yard modern dengan teknologi Realtime Database dan integrasi WhatsApp Gateway
-  </p>
+# Warehouse YMS V3 Enterprise
 
-  <br />
+### Sistem Manajemen Logistik & Antrian Gudang Terintegrasi
+
+[![React](https://img.shields.io/badge/React-18.0-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-Realtime-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.0-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+
+**Zero Latency · High Security · Automated Flow**
+
+Solusi manajemen yard modern dengan teknologi Realtime Database dan integrasi WhatsApp Gateway
+
+[Demo](https://warehouse-yms.vercel.app) · [Report Bug](https://github.com/Andrna09/warehouse-yms-v3/issues) · [Request Feature](https://github.com/Andrna09/warehouse-yms-v3/issues)
+
+![App Screenshot](public/Area.png)
 
 </div>
 
 ---
 
-## 💎 Keunggulan Fitur (V3 Enterprise)
+## 📑 Table of Contents
 
-Sistem ini telah di-upgrade ke standar korporasi dengan fokus pada **Kecepatan**, **Keamanan**, dan **User Experience**.
-
-### ⚡ Superfast Realtime Engine
-*Tidak ada lagi tombol refresh.*
-* **Instant Sync:** Security Dashboard dan Layar Driver tersinkronisasi dalam hitungan milidetik (0.1s).
-* **Technology:** Menggunakan teknologi **Supabase Realtime Subscription** menggantikan metode *polling* lama.
-
-### 🎫 Hybrid Smart Ticketing
-Satu URL, dua wajah. Sistem tiket cerdas yang beradaptasi dengan status operasional:
-
-| Phase | Status | Tampilan | Deskripsi |
-| :--- | :--- | :--- | :--- |
-| **1** | **Booking** | 🟣 **PINK** | **Official Entry Pass** berisi Slot Waktu |
-| **2** | **Inside** | 🟢 **HIJAU** | **Queue Ticket** berisi Nomor Antrian |
-| **3** | **Expired** | ⚫ **ABU** | **Void/Hangus** otomatis saat checkout |
-
-### 🛡️ Security Gate System
-Modul khusus untuk pos keamanan dengan fitur ketat:
-* **QR Scanner Terintegrasi:** Scan tiket langsung dari dashboard.
-* **Digital Checklist:** Pemeriksaan APD (Helm, Rompi, Sepatu) wajib sebelum masuk.
-* **Anti-Fraud:** Nomor antrian (`SOC-001`) digenerate berurutan oleh server, mustahil dipalsukan.
-
-### 🤖 WhatsApp Automation
-Notifikasi otomatis terkirim ke driver tanpa intervensi manual:
-* ✅ **BOOKING APPROVED** → Kirim Link Tiket
-* ✅ **CHECK-IN SUCCESS** → Kirim Nomor Antrian
-* ✅ **DOCK ASSIGNMENT** → Panggilan Bongkar Muat
-* ✅ **CHECK-OUT** → Surat Jalan Digital Selesai
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [System Architecture](#-system-architecture)
+- [Tech Stack](#️-tech-stack)
+- [Getting Started](#-getting-started)
+- [Usage](#-usage)
+- [Contributing](#-contributing)
+- [License](#-license)
+- [Contact](#-contact)
 
 ---
 
-## 🔄 Alur Kerja Sistem
+## 🎯 Overview
+
+**Warehouse YMS V3 Enterprise** adalah sistem manajemen antrian gudang generasi ketiga yang dirancang untuk menghilangkan bottleneck operasional logistics. Dengan arsitektur real-time dan automasi penuh, sistem ini mampu menangani ratusan kunjungan truck harian dengan efisiensi maksimal.
+
+### Why Warehouse YMS?
+
+- ⚡ **Real-time Updates** - Zero delay antara aksi dan notifikasi
+- 🔒 **Enterprise Security** - Multi-layer validation dengan anti-fraud system
+- 📱 **Mobile-First** - Responsive design untuk semua device
+- 🤖 **Full Automation** - WhatsApp notifications tanpa intervensi manual
+- 📊 **Smart Analytics** - Track KPI dan operasional metrics
+
+---
+
+## 💎 Key Features
+
+### ⚡ Superfast Realtime Engine
+
+Tidak ada lagi tombol refresh atau delay data.
+
+- **Instant Synchronization** - Dashboard Security dan layar Driver tersinkronisasi dalam milidetik (0.1s)
+- **Supabase Realtime** - Menggunakan PostgreSQL replication untuk data consistency
+- **Auto-refresh** - Semua perubahan status langsung muncul tanpa user action
+
+### 🎫 Hybrid Smart Ticketing
+
+Satu URL dengan multiple personas berdasarkan status operasional.
+
+<table>
+<thead>
+<tr>
+<th align="center">Phase</th>
+<th align="center">Status</th>
+<th align="center">Theme</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center"><strong>1</strong></td>
+<td align="center">Booking</td>
+<td align="center">🟣 <strong>PINK</strong></td>
+<td><strong>Official Entry Pass</strong> - Berisi booking code & slot waktu kedatangan</td>
+</tr>
+<tr>
+<td align="center"><strong>2</strong></td>
+<td align="center">Inside</td>
+<td align="center">🟢 <strong>GREEN</strong></td>
+<td><strong>Queue Ticket</strong> - Berisi nomor antrian real-time & status loading</td>
+</tr>
+<tr>
+<td align="center"><strong>3</strong></td>
+<td align="center">Expired</td>
+<td align="center">⚫ <strong>GRAY</strong></td>
+<td><strong>Void/Hangus</strong> - Auto-lock setelah checkout untuk anti-reuse</td>
+</tr>
+</tbody>
+</table>
+
+### 🛡️ Security Gate System
+
+Modul khusus untuk pos keamanan dengan multiple verification layers.
+
+- **QR Scanner Integration** - Built-in scanner tanpa hardware tambahan
+- **Digital Safety Checklist** - Mandatory APD verification (Helm, Rompi, Sepatu Safety)
+- **Anti-Fraud Protection** - Server-side queue number generation (`SOC-001`, `SOC-002`) yang mustahil dipalsukan
+- **Revision Tracking** - Complete audit trail untuk setiap perubahan data
+
+### 🤖 WhatsApp Automation
+
+Notification engine yang mengirim update otomatis pada setiap milestone.
+
+```
+✅ BOOKING APPROVED    →  Link tiket booking + instruksi kedatangan
+✅ CHECK-IN SUCCESS    →  Nomor antrian + estimasi waktu panggilan  
+✅ DOCK ASSIGNMENT     →  Notifikasi panggilan ke dock tertentu
+✅ CHECKOUT COMPLETE   →  Konfirmasi selesai + surat jalan digital
+```
+
+---
+
+## 🔄 System Architecture
+
+### Workflow Diagram
 
 ```mermaid
 graph LR
-    A[🏠 Driver Booking] -->|Admin Approve| B(🎟️ Tiket Pink WA)
-    B -->|Datang ke Gudang| C{🚧 Security Gate}
-    C -->|Scan & Cek Fisik| D[✅ Check-In Berhasil]
-    D -->|Auto Generated| E(🎫 Tiket Hijau WA)
-    E -->|Realtime Update| F[🚛 Proses Bongkar]
-    F -->|Selesai| G[🏁 Checkout / Keluar]
-    G -->|Tiket Hangus| H(❌ Sesi Berakhir)
-
+    A[🏠 Driver Booking] -->|Admin Approve| B(🎟️ Pink Ticket via WA)
+    B -->|Arrival at Gate| C{🚧 Security Checkpoint}
+    C -->|Scan QR & Safety Check| D[✅ Check-In Success]
+    D -->|Auto-Generate| E(🎫 Green Ticket via WA)
+    E -->|Real-time Status| F[🚛 Loading/Unloading]
+    F -->|Process Complete| G[🏁 Checkout]
+    G -->|Auto-Expire| H(❌ Session End)
 ```
 
----
+### Data Flow
 
-## 🛠️ Tech Stack & Architecture
-
-Dibangun dengan teknologi modern untuk performa maksimal.
-
-| Component | Technology | Description |
-| --- | --- | --- |
-| **Frontend** | React + Vite | Performa rendering ultra-cepat |
-| **Language** | TypeScript | Type-safety untuk kode yang solid |
-| **Styling** | Tailwind CSS | Desain responsif & modern (Glassmorphism) |
-| **Database** | Supabase | PostgreSQL dengan fitur Realtime |
-| **Icons** | Lucide React | Ikon vektor ringan & tajam |
-| **QR Engine** | QRCode.react | Generator QR Code client-side |
+1. **Booking Layer** - Driver submits request → Admin approval → WhatsApp ticket
+2. **Security Layer** - QR scan → Safety checklist → Entry authorization
+3. **Operations Layer** - Queue management → Dock assignment → Real-time tracking
+4. **Exit Layer** - Completion check → Checkout → Ticket expiration
 
 ---
 
-## 🚀 Instalasi & Penggunaan
+## 🛠️ Tech Stack
 
-Ikuti langkah ini untuk menjalankan project di lokal komputer Anda.
+### Frontend
 
-### Prasyarat
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **React** | 18.0 | UI library with hooks & context |
+| **Vite** | 5.0 | Ultra-fast build tool & dev server |
+| **TypeScript** | 5.0 | Type-safe development |
+| **Tailwind CSS** | 3.0 | Utility-first styling |
+| **Lucide React** | Latest | Icon library |
 
-* Node.js (v18+)
-* Akun Supabase (untuk database)
+### Backend & Services
 
-### Langkah-langkah
+| Technology | Purpose |
+|------------|---------|
+| **Supabase** | PostgreSQL database with real-time subscriptions |
+| **Supabase Auth** | User authentication & authorization |
+| **Supabase Storage** | Document & photo storage |
+| **WhatsApp API** | Automated notifications |
 
-1. **Clone Repository**
+### Tools & Libraries
+
+- **QRCode.react** - QR code generation
+- **@yudiel/react-qr-scanner** - QR code scanning
+- **date-fns** - Date manipulation
+- **React Router** - Client-side routing
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+Pastikan Anda sudah menginstall:
+
+- **Node.js** >= 18.0.0
+- **npm** atau **yarn**
+- **Akun Supabase** (gratis di [supabase.com](https://supabase.com))
+
+### Installation
+
+**1. Clone repository**
+
 ```bash
 git clone https://github.com/Andrna09/warehouse-yms-v3.git
 cd warehouse-yms-v3
-
 ```
 
+**2. Install dependencies**
 
-2. **Install Dependencies**
 ```bash
 npm install
-
 ```
 
+**3. Environment setup**
 
-3. **Konfigurasi Environment**
-Buat file `.env` di root folder:
+Buat file `.env` di root directory:
+
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key-here
-
 ```
 
+**4. Database setup**
 
-4. **Jalankan Development Server**
+Jalankan migration scripts di Supabase SQL Editor:
+
+```sql
+-- Lihat file /database/schema.sql untuk struktur lengkap
+```
+
+**5. Run development server**
+
 ```bash
 npm run dev
-
 ```
 
+Aplikasi akan berjalan di `http://localhost:5173`
 
+### Build for Production
+
+```bash
+npm run build
+npm run preview  # Preview production build
+```
+
+---
+
+## 📖 Usage
+
+### For Drivers
+
+1. Akses halaman booking
+2. Isi data kunjungan (nama, plat nomor, vendor, tujuan)
+3. Upload dokumen pendukung
+4. Tunggu approval dari admin
+5. Terima tiket booking (pink) via WhatsApp
+6. Datang ke gudang dan tunjukkan QR code ke security
+7. Terima tiket antrian (green) via WhatsApp
+8. Tunggu panggilan ke dock
+9. Lakukan loading/unloading
+10. Checkout di pos security
+
+### For Security
+
+1. Login ke Security Dashboard
+2. Scan QR code driver yang datang
+3. Verifikasi data dan lakukan safety checklist
+4. Approve masuk → sistem auto-generate nomor antrian
+5. Monitor truck yang sedang di dalam
+6. Scan QR untuk checkout saat driver selesai
+
+### For Admin
+
+1. Login ke Admin Dashboard
+2. Review booking requests
+3. Approve/reject dengan notes
+4. Monitor operasional real-time
+5. Kelola gate configuration
+6. Export reports
+
+---
+
+## 🤝 Contributing
+
+Kontribusi selalu diterima dengan tangan terbuka! Jika Anda ingin berkontribusi:
+
+1. Fork repository ini
+2. Buat feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push ke branch (`git push origin feature/AmazingFeature`)
+5. Buka Pull Request
+
+---
+
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+
+## 📞 Contact
+
+<div align="center">
+
+### 👑 Developed By Andrna
+
+*"Quality code for quality logistics operation."*
+
+[![GitHub](https://img.shields.io/badge/GitHub-Andrna09-181717?style=for-the-badge&logo=github)](https://github.com/Andrna09)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=for-the-badge&logo=linkedin)](https://linkedin.com/in/andrna)
+[![Email](https://img.shields.io/badge/Email-Contact-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](mailto:andrna@example.com)
+
+---
+
+**Project Link:** [https://github.com/Andrna09/warehouse-yms-v3](https://github.com/Andrna09/warehouse-yms-v3)
+
+© 2026 Warehouse YMS V3 Enterprise. All Rights Reserved.
+
+</div>
 
 ---
 
 <div align="center">
 
-<h3>👑 Developed By Andrna</h3>
-<p><i>"Quality code for quality logistics operation."</i></p>
+### ⭐ Star this repo if you find it useful!
 
-<a href="[https://github.com/Andrna09](https://github.com/Andrna09)">
-<img src="[https://img.shields.io/badge/GitHub-Andrna09-181717?style=for-the-badge&logo=github](https://www.google.com/search?q=https://img.shields.io/badge/GitHub-Andrna09-181717%3Fstyle%3Dfor-the-badge%26logo%3Dgithub)" alt="Andrna GitHub" />
-</a>
-
-
-
-
-
-<sub>© 2026 Warehouse YMS V3 Enterprise. All Rights Reserved.</sub>
+Made with ❤️ by Andrna
 
 </div>
