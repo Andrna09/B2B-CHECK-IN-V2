@@ -43,7 +43,7 @@ const DriverStatus: React.FC<Props> = ({ driverId, onBack }) => {
 
   if (!driver) return null;
 
-  // 🔥 LOGIKA BARU: TIKET HANGUS JIKA SUDAH KELUAR 🔥
+  // 🔥 LOGIKA TIKET HANGUS (JIKA SUDAH KELUAR/EXITED) 🔥
   if (driver.status === QueueStatus.EXITED) {
       return (
         <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-6 text-center animate-fade-in-up">
@@ -73,20 +73,23 @@ const DriverStatus: React.FC<Props> = ({ driverId, onBack }) => {
       );
   }
 
-  // --- LOGIKA TIKET AKTIF (SAMA SEPERTI SEBELUMNYA) ---
+  // --- LOGIKA TAMPILAN TIKET AKTIF ---
   const searchParams = new URLSearchParams(window.location.search);
   const mode = searchParams.get('mode');
+
+  // Jika mode='booking', paksa tampilan Booking (Pink)
+  // Jika tidak, ikuti status asli (Hijau jika sudah masuk)
   const isRealCheckedIn = [QueueStatus.CHECKED_IN, QueueStatus.CALLED, QueueStatus.LOADING, QueueStatus.COMPLETED].includes(driver.status);
   const isCheckedIn = (mode === 'booking') ? false : isRealCheckedIn;
 
   const theme = isCheckedIn ? {
-      color: '#10B981', 
+      color: '#10B981', // HIJAU
       bg: '#ECFDF5',
       title: 'QUEUE TICKET',
       type: 'CHECKED-IN / INSIDE',
       icon: <Megaphone className="w-5 h-5 text-emerald-500" />
   } : {
-      color: '#D46A83', 
+      color: '#D46A83', // PINK
       bg: '#FDF2F4',
       title: 'OFFICIAL ENTRY PASS',
       type: driver.entryType === 'BOOKING' ? 'PRE-BOOKED' : 'DIRECT ENTRY',
