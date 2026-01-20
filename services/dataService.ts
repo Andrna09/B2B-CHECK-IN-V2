@@ -69,7 +69,6 @@ export const createCheckIn = async (data: Partial<DriverData>, docFile?: string)
   return insertedData ? mapDatabaseToDriver(insertedData) : null;
 };
 
-// 🔥 UPDATE 1: Link Booking dengan '?mode=booking' 🔥
 export const approveBooking = async (id: string): Promise<boolean> => {
     const { data: driver, error: fetchError } = await supabase.from('drivers').select('purpose, name, phone').eq('id', id).single();
     if (fetchError || !driver) return false;
@@ -94,7 +93,6 @@ export const approveBooking = async (id: string): Promise<boolean> => {
     }).eq('id', id);
 
     if (!error && driver.phone) {
-         // 👇 TAMBAHKAN &mode=booking
          const appUrl = `${window.location.origin}?ticket_id=${id}&mode=booking`;
          const msg = `*TIKET ANDA SUDAH TERBIT!* ✅\n\nHalo ${driver.name},\nKode Booking: *${finalCode}*\n\n👇 *KLIK LINK UNTUK DOWNLOAD TIKET:* 👇\n${appUrl}\n\n⚠️ *PENTING:* Simpan gambar tiket di HP Anda untuk ditunjukkan ke Security.`;
          await sendWhatsAppNotification(driver.phone, msg);
@@ -111,13 +109,14 @@ export const rejectBooking = async (id: string, reason: string): Promise<boolean
     return !error;
 };
 
-// 🔥 UPDATE 2: Link Antrian dengan '?mode=live' 🔥
+// 🔥 UPDATE: GENERATOR NOMOR ANTRIAN BERURUTAN (SOC-001) 🔥
 export const reviseAndCheckIn = async (
     id: string, 
     revisedData: { name: string, plate: string, company: string, phone?: string, purpose?: string }
 ): Promise<boolean> => {
     const { data: oldData } = await supabase.from('drivers').select('*').eq('id', id).single();
     
+    // 1. Logic Revisi Log
     let revisionLog = '';
     if(oldData) {
         revisionLog = `[GATE REVISION ${new Date().toLocaleTimeString('id-ID')}]
@@ -128,8 +127,28 @@ export const reviseAndCheckIn = async (
         Tujuan: ${oldData.purpose} -> ${revisedData.purpose || oldData.purpose}`;
     }
 
-    const queueNo = `SOC-${Math.floor(100 + Math.random() * 900)}`; 
+    // 2. 🔥 LOGIC BARU: Ambil Nomor Antrian Terakhir Hari Ini 🔥
+    const todayStart = new Date(); 
+    todayStart.setHours(0,0,0,0);
     
+    const { data: lastQueue } = await supabase.from('drivers')
+        .select('queue_number')
+        .gte('verified_time', todayStart.getTime()) // Hanya hari ini
+        .order('verified_time', { ascending: false })
+        .limit(1)
+        .single();
+
+    let nextNum = 1;
+    if (lastQueue && lastQueue.queue_number) {
+         const parts = lastQueue.queue_number.split('-');
+         const lastNumStr = parts[parts.length - 1]; // Ambil angka di belakang (SOC-005 -> 005)
+         if (!isNaN(parseInt(lastNumStr))) {
+             nextNum = parseInt(lastNumStr) + 1;
+         }
+    }
+    const queueNo = `SOC-${nextNum.toString().padStart(3, '0')}`; // Hasil: SOC-001, SOC-002, dst
+
+    // 3. Update Database
     const { error } = await supabase.from('drivers').update({
         name: revisedData.name,
         license_plate: revisedData.plate,
@@ -142,10 +161,10 @@ export const reviseAndCheckIn = async (
         security_notes: oldData.security_notes ? `${oldData.security_notes}\n\n${revisionLog}` : revisionLog
     }).eq('id', id);
 
+    // 4. Kirim WA
     if (!error) {
         const targetPhone = revisedData.phone || oldData.phone;
         if (targetPhone) {
-            // 👇 TAMBAHKAN &mode=live
             const appUrl = `${window.location.origin}?ticket_id=${id}&mode=live`;
             const msg = `*CHECK-IN BERHASIL!* 🏁\n\nNomor Antrian: *${queueNo}*\nPlat: ${revisedData.plate}\n\nTiket Anda sudah berubah status menjadi *TIKET ANTRIAN* (Warna Hijau).\n\n👇 *KLIK UNTUK LIHAT TIKET BARU:* 👇\n${appUrl}\n\nSilakan parkir dan tunggu panggilan di TV Monitor.`;
             await sendWhatsAppNotification(targetPhone, msg);
@@ -276,7 +295,6 @@ export const resendBookingNotification = async (id: string): Promise<boolean> =>
     const { data: driver, error } = await supabase.from('drivers').select('*').eq('id', id).single();
     if (error || !driver || !driver.booking_code) return false;
     if (driver.phone) {
-         // 👇 DEFAULTNYA MODE BOOKING KALAU KIRIM ULANG
          const appUrl = `${window.location.origin}?ticket_id=${id}&mode=booking`;
          const msg = `*PENGIRIMAN ULANG TIKET* 🔄\n\nHalo ${driver.name},\nKode Booking: *${driver.booking_code}*\n\n👇 *KLIK LINK UNTUK DOWNLOAD TIKET:* 👇\n${appUrl}\n\nSimpan pesan ini baik-baik ya.`;
          return await sendWhatsAppNotification(driver.phone, msg);
@@ -284,7 +302,6 @@ export const resendBookingNotification = async (id: string): Promise<boolean> =>
     return false;
 };
 
-// DEV CONFIG
 export interface DevConfig {
   enableGpsBypass: boolean;
   enableMockOCR: boolean;
