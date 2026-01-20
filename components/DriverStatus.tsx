@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Clock, MapPin, RefreshCw, Truck, FileText, ArrowLeft, Loader2, Megaphone, AlertCircle } from 'lucide-react';
+import { Download, Loader2, MapPin, Calendar, Clock, Megaphone, CheckCircle, RefreshCw } from 'lucide-react';
 import { DriverData, QueueStatus } from '../types';
 import { getDriverById } from '../services/dataService';
-import TicketPass from './TicketPass'; // [PENTING] Import komponen tiket
+import TicketPass from './TicketPass';
 
 interface Props {
   driverId: string;
@@ -13,183 +13,196 @@ interface Props {
 const DriverStatus: React.FC<Props> = ({ driverId, onBack }) => {
   const [driver, setDriver] = useState<DriverData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-  
-  // [BARU] State untuk Modal Tiket
   const [showTicketModal, setShowTicketModal] = useState(false);
 
+  // Fungsi Fetch Data
   const fetchStatus = async () => {
     try {
-      setLoading(true);
       const data = await getDriverById(driverId);
       if (data) setDriver(data);
     } catch (error) {
-      console.error("Gagal mengambil data driver", error);
+      console.error("Gagal ambil data", error);
     } finally {
       setLoading(false);
-      setLastUpdate(new Date());
     }
   };
 
+  // Auto Refresh Tiap 15 Detik (Cepat update kalau dipanggil)
   useEffect(() => {
     fetchStatus();
-    // Auto refresh setiap 30 detik
-    const interval = setInterval(fetchStatus, 30000);
+    const interval = setInterval(fetchStatus, 15000);
     return () => clearInterval(interval);
   }, [driverId]);
 
   if (loading && !driver) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
-        <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
-        <p className="text-slate-500 font-medium">Memuat Status...</p>
+        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-4" />
+        <p className="text-slate-500 font-bold">Memuat Tiket...</p>
       </div>
     );
   }
 
-  if (!driver) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 text-center">
-        <AlertCircle className="w-16 h-16 text-red-400 mb-4" />
-        <h2 className="text-xl font-bold text-slate-800">Data Tidak Ditemukan</h2>
-        <p className="text-slate-500 mb-6">Mohon cek kembali kode booking atau hubungi petugas.</p>
-        <button onClick={onBack} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-bold">Kembali</button>
-      </div>
-    );
-  }
+  if (!driver) return null;
 
-  // Helper untuk warna status
-  const getStatusColor = (status: QueueStatus) => {
-    switch (status) {
-      case QueueStatus.PENDING_REVIEW: return 'bg-amber-100 text-amber-700 border-amber-200';
-      case QueueStatus.BOOKED: return 'bg-blue-100 text-blue-700 border-blue-200';
-      case QueueStatus.CHECKED_IN: return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      case QueueStatus.CALLED: return 'bg-orange-100 text-orange-700 border-orange-200'; 
-      case QueueStatus.LOADING: return 'bg-purple-100 text-purple-700 border-purple-200';
-      case QueueStatus.COMPLETED: return 'bg-green-100 text-green-700 border-green-200';
-      case QueueStatus.REJECTED: 
-      case QueueStatus.REJECTED_NEED_REBOOK: return 'bg-red-100 text-red-700 border-red-200';
-      default: return 'bg-slate-100 text-slate-600 border-slate-200';
-    }
+  // 🔥 LOGIKA TEMA (SAMA DENGAN TICKETPASS) 🔥
+  const isCheckedIn = [QueueStatus.CHECKED_IN, QueueStatus.CALLED, QueueStatus.LOADING, QueueStatus.COMPLETED].includes(driver.status);
+  
+  const theme = isCheckedIn ? {
+      color: '#10B981', // Emerald (Hijau)
+      bg: '#ECFDF5',
+      title: 'QUEUE TICKET',
+      type: 'CHECKED-IN / INSIDE',
+      icon: <Megaphone className="w-5 h-5 text-emerald-500" />
+  } : {
+      color: '#D46A83', // Rose (Pink)
+      bg: '#FDF2F4',
+      title: 'OFFICIAL ENTRY PASS',
+      type: driver.entryType === 'BOOKING' ? 'PRE-BOOKED' : 'DIRECT ENTRY',
+      icon: <Calendar className="w-5 h-5 text-pink-500" />
+  };
+
+  // Status Text Helper
+  const getStatusText = () => {
+      switch(driver.status) {
+          case QueueStatus.PENDING_REVIEW: return "Menunggu Verifikasi";
+          case QueueStatus.BOOKED: return "Menunggu Kedatangan";
+          case QueueStatus.AT_GATE: return "Pemeriksaan Security";
+          case QueueStatus.CHECKED_IN: return "Menunggu Panggilan Dock";
+          case QueueStatus.CALLED: return "SILAKAN MENUJU DOCK!";
+          case QueueStatus.LOADING: return "Sedang Bongkar Muat";
+          case QueueStatus.COMPLETED: return "Selesai (Siap Keluar)";
+          default: return driver.status;
+      }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-10">
-      {/* Header Mobile */}
-      <div className="bg-white px-4 py-4 shadow-sm border-b border-slate-100 sticky top-0 z-10 flex items-center justify-between">
-        <button onClick={onBack} className="p-2 -ml-2 text-slate-400 hover:text-slate-800 rounded-full hover:bg-slate-50">
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <h1 className="font-bold text-slate-800 text-lg">Status Pengiriman</h1>
-        <button onClick={fetchStatus} className="p-2 -mr-2 text-blue-600 hover:bg-blue-50 rounded-full">
-          <RefreshCw className="w-5 h-5" />
-        </button>
+    <div className="min-h-screen bg-slate-100 flex flex-col items-center p-4 font-sans pb-20">
+      
+      {/* TOMBOL REFRESH MANUAL (Pojok Kanan Atas) */}
+      <button 
+        onClick={fetchStatus}
+        className="absolute top-4 right-4 z-50 p-3 bg-white rounded-full shadow-lg text-slate-600 hover:text-emerald-600 transition-colors"
+      >
+        <RefreshCw className="w-5 h-5" />
+      </button>
+
+      {/* 1. KARTU UTAMA (Mirip TiketPass) */}
+      <div className="w-full max-w-sm bg-white rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white mb-6 animate-fade-in-up mt-4">
+          
+          {/* HEADER WARNA */}
+          <div className="bg-[#2D2D2D] p-6 text-white relative overflow-hidden transition-colors duration-500">
+                {/* Blob Background */}
+                <div 
+                    className="absolute top-0 right-0 w-40 h-40 rounded-full blur-[60px] opacity-40 -mr-10 -mt-10 transition-colors duration-500"
+                    style={{ backgroundColor: theme.color }}
+                ></div>
+
+                <div className="flex justify-between items-center relative z-10 mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1.5 shadow-lg">
+                             <img src="/Logo.png" className="w-full h-full object-contain" alt="Logo" onError={(e) => e.currentTarget.style.display = 'none'}/>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-xl leading-none font-serif tracking-wide">sociolla</h3>
+                            <p className="text-[9px] font-bold uppercase tracking-widest mt-1" style={{ color: theme.color }}>
+                                {theme.title}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="text-center relative z-10 py-2">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mb-1">
+                        {isCheckedIn ? 'NOMOR ANTRIAN' : 'PLAT NOMOR'}
+                    </p>
+                    <h1 className="text-6xl font-black tracking-tighter text-white drop-shadow-lg" style={{ letterSpacing: '-0.05em' }}>
+                        {isCheckedIn ? (driver.queueNumber || '---') : driver.licensePlate}
+                    </h1>
+                </div>
+          </div>
+
+          {/* BODY KARTU */}
+          <div className="bg-white p-6 relative">
+              {/* Lubang Tiket */}
+              <div className="absolute left-0 top-[-16px] w-8 h-8 rounded-full z-20 bg-slate-100" style={{ transform: 'translateX(-50%)' }}></div>
+              <div className="absolute right-0 top-[-16px] w-8 h-8 rounded-full z-20 bg-slate-100" style={{ transform: 'translateX(50%)' }}></div>
+              <div className="absolute left-6 right-6 top-[-1px] border-t-2 border-dashed border-slate-300 z-10"></div>
+
+              {/* Status Bar */}
+              <div className="mb-6 p-4 rounded-2xl flex items-center gap-3 relative z-20 shadow-sm transition-colors duration-500" style={{ backgroundColor: theme.bg }}>
+                  {theme.icon}
+                  <div>
+                      <p className="text-[10px] font-bold uppercase opacity-70" style={{ color: theme.color }}>STATUS AKTUAL</p>
+                      <p className={`text-sm font-black text-slate-800 ${driver.status === QueueStatus.CALLED ? 'animate-pulse text-red-600' : ''}`}>
+                          {getStatusText()}
+                      </p>
+                  </div>
+              </div>
+
+              {/* Info Grid */}
+              <div className="grid grid-cols-2 gap-y-6 relative z-20">
+                  <div className="pr-2 border-r border-slate-100">
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">PLAT NOMOR</p>
+                      <p className="font-bold text-slate-800 text-lg">{driver.licensePlate}</p>
+                  </div>
+                  <div className="pl-4 text-right">
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">JAM MASUK</p>
+                      <div className="flex items-center justify-end gap-1 font-bold text-sm" style={{ color: theme.color }}>
+                          <Clock className="w-3 h-3 shrink-0"/> 
+                          <span>
+                            {isCheckedIn && driver.verifiedTime 
+                                ? new Date(driver.verifiedTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) 
+                                : (driver.slotTime || '-')}
+                          </span>
+                      </div>
+                  </div>
+              </div>
+
+              {/* QR Code */}
+              <div className="mt-8 flex flex-col items-center justify-center relative z-20">
+                  <div className="p-4 bg-white border-4 rounded-3xl shadow-sm transition-colors duration-500" style={{ borderColor: theme.bg }}>
+                      <QRCodeSVG value={driver.bookingCode || 'NO_DATA'} size={180} />
+                  </div>
+                  <p className="mt-4 font-mono font-bold text-xl tracking-widest text-slate-700 text-center break-all">
+                      {driver.bookingCode}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-1">Tunjukkan QR ini kepada Security</p>
+              </div>
+          </div>
       </div>
 
-      <div className="max-w-md mx-auto p-4 space-y-4">
-        
-        {/* KARTU STATUS UTAMA */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 text-center relative overflow-hidden">
-           <div className={`inline-block px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-4 border ${getStatusColor(driver.status)}`}>
-              {driver.status.replace(/_/g, ' ')}
-           </div>
+      {/* 2. TOMBOL DOWNLOAD (Floating Style) */}
+      <div className="w-full max-w-sm space-y-3 pb-8">
+          <button 
+            onClick={() => setShowTicketModal(true)}
+            className="w-full py-4 text-white font-bold rounded-2xl shadow-xl transition-all hover:scale-[1.02] flex items-center justify-center gap-2 active:scale-95"
+            style={{ backgroundColor: theme.color }}
+          >
+              <Download className="w-5 h-5"/>
+              SIMPAN GAMBAR TIKET
+          </button>
+          
+          <button 
+             onClick={onBack}
+             className="w-full py-4 bg-white text-slate-500 font-bold rounded-2xl shadow-sm border border-slate-200"
+          >
+             Kembali ke Menu
+          </button>
 
-           {/* Logic Tampilan Berdasarkan Status */}
-           {driver.status === QueueStatus.PENDING_REVIEW ? (
-              <div className="py-4">
-                 <Clock className="w-16 h-16 text-amber-500 mx-auto mb-4 animate-pulse" />
-                 <h2 className="text-2xl font-black text-slate-800">Menunggu Verifikasi</h2>
-                 <p className="text-slate-500 text-sm mt-2">Data Anda sedang ditinjau Admin.</p>
-              </div>
-           ) : driver.status === QueueStatus.BOOKED ? (
-              <div className="py-4">
-                 <div className="bg-white p-4 rounded-2xl shadow-inner border border-slate-100 inline-block mb-4">
-                    <QRCodeSVG value={driver.bookingCode || 'N/A'} size={140} />
-                 </div>
-                 <p className="font-mono font-bold text-lg text-slate-800 tracking-widest">{driver.bookingCode}</p>
-                 <p className="text-xs text-slate-400 mt-1">Tunjukkan QR ini ke Security</p>
-              </div>
-           ) : driver.status === QueueStatus.CALLED ? (
-              <div className="py-4 animate-pulse">
-                 <Megaphone className="w-16 h-16 text-orange-500 mx-auto mb-4" />
-                 <h2 className="text-3xl font-black text-orange-600 uppercase">PANGGILAN!</h2>
-                 <p className="text-lg font-bold text-slate-800 mt-2">Segera Menuju {driver.gate || 'Loading Dock'}</p>
-              </div>
-           ) : (
-              <div className="py-2">
-                 <h2 className="text-3xl font-black text-slate-800">{driver.licensePlate}</h2>
-                 <p className="text-slate-500">{driver.company}</p>
-              </div>
-           )}
-        </div>
-
-        {/* DETAIL INFO */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
-            <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
-                    <Truck className="w-5 h-5" />
-                </div>
-                <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase">Tujuan</p>
-                    <p className="font-bold text-slate-800">{driver.purpose} - {driver.entryType}</p>
-                </div>
-            </div>
-            
-            {driver.gate && (
-              <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center text-blue-500">
-                      <MapPin className="w-5 h-5" />
-                  </div>
-                  <div>
-                      <p className="text-xs font-bold text-slate-400 uppercase">Lokasi Gate</p>
-                      <p className="font-bold text-blue-700 text-lg">{driver.gate}</p>
-                  </div>
-              </div>
-            )}
-
-            {driver.queueNumber && (
-              <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-purple-50 rounded-full flex items-center justify-center text-purple-500">
-                      <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                      <p className="text-xs font-bold text-slate-400 uppercase">Nomor Antrian</p>
-                      <p className="font-bold text-purple-700 text-lg">{driver.queueNumber}</p>
-                  </div>
-              </div>
-            )}
-        </div>
-
-        {/* ======================================================= */}
-        {/* 🔥 [FITUR BARU] TOMBOL DOWNLOAD TIKET 🔥 */}
-        {/* ======================================================= */}
-        {driver.status === QueueStatus.BOOKED && (
-             <div className="mt-8 animate-fade-in-up">
-                <p className="text-center text-sm text-slate-500 mb-2">Tiket Anda sudah siap!</p>
-                <button 
-                    onClick={() => setShowTicketModal(true)} 
-                    className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold rounded-2xl shadow-xl shadow-pink-200 hover:scale-[1.02] transition-transform flex items-center justify-center gap-3"
-                >
-                    <FileText className="w-6 h-6"/> 
-                    <span className="text-lg">DOWNLOAD TIKET</span>
-                </button>
-             </div>
-        )}
-
-        {/* MODAL TIKET PASS */}
-        {showTicketModal && (
-            <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
-                <div className="w-full max-w-sm">
-                     <TicketPass data={driver} onClose={() => setShowTicketModal(false)} />
-                </div>
-            </div>
-        )}
-
-        <p className="text-center text-xs text-slate-300 font-medium pt-4">
-          Terakhir diperbarui: {lastUpdate.toLocaleTimeString()}
-        </p>
-
+          <p className="text-center text-xs text-slate-400 mt-4 leading-relaxed px-4">
+              Halaman ini otomatis diperbarui.<br/>
+              Pastikan Anda berada di area yang ditentukan.
+          </p>
       </div>
+
+      {/* MODAL DOWNLOAD (Untuk simpan gambar) */}
+      {showTicketModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <TicketPass data={driver} onClose={() => setShowTicketModal(false)} />
+          </div>
+      )}
+
     </div>
   );
 };
